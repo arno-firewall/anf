@@ -41,7 +41,7 @@ plugin_start()
   IFS=' ,'
   for src in $IPV6_OVER_IPV4_SERVER; do
     for interface in $IPV6_OVER_IPV4_IF; do
-      ip4tables -A EXT_INPUT_CHAIN -s $src -i $interface -p 41 -j ACCEPT
+      nft_rule EXT_INPUT_CHAIN "meta nfproto ipv4 $(nft_addr saddr $src) $(nft_if iifname $interface) meta l4proto 41 accept"
     done
   done
 

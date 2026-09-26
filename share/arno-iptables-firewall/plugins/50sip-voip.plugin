@@ -69,19 +69,12 @@ plugin_start()
     modprobe_multi nf_nat_sip ip_nat_sip
   fi
 
-  if ip4tables -nL CONNTRACK_HELPER >/dev/null 2>&1; then
-    iptables -A CONNTRACK_HELPER -m conntrack --ctstate RELATED -m helper --helper sip -j ACCEPT
-
-    IFS=' ,'
-    for port in $SIP_VOIP_PORTS; do
-      iptables -t raw -A PREROUTING -p udp --dport $port -j CT --helper sip
-    done
-  fi
+  load_conntrack_helper_module sip udp "$SIP_VOIP_PORTS"
 
   IFS=' ,'
   for host in $SIP_VOIP_REMOTE_HOSTS; do
     for port in $SIP_VOIP_PORTS; do
-      iptables -A EXT_INPUT_CHAIN -s $host -p udp --dport $port -j ACCEPT
+      nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port accept"
     done
   done
 

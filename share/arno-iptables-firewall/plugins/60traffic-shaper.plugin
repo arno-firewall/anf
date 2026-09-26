@@ -55,17 +55,16 @@ setclassbyport()
   local pport="$1" class="$2" port sport proto IFS
 
   case $pport in
-    t*) proto=tcp; port="${pport#t}" ;;
-    u*) proto=udp; port="${pport#u}" ;;
+    t*) proto=tcp; port="$(echo "${pport#t}" |nft_ports)" ;;
+    u*) proto=udp; port="$(echo "${pport#u}" |nft_ports)" ;;
     *)  printf "\033[40m\033[1;31m${INDENT}ERROR: Unknown protocol/port $pport!\n\033[0m" >&2
         return 1 ;;
   esac
 
   # We assume that on egress traffic, only the destination port is
   # significant, i.e. that we're not running any servers locally.
-  iptables -t mangle -A SHAPER_CHAIN -m $proto -p $proto --dport $port -j CLASSIFY \
-    --set-class $class
-  iptables -t mangle -A SHAPER_CHAIN -m $proto -p $proto --dport $port -j RETURN
+  nft_rule SHAPER_CHAIN "meta l4proto $proto th dport $port meta priority set $class"
+  nft_rule SHAPER_CHAIN "meta l4proto $proto th dport $port return"
 
   # If we are running servers locally, include the protocol/port from the
   # SHAPER_LOCAL_SERVER_PORTS variable to also generate a --sport classify rule.
@@ -73,9 +72,8 @@ setclassbyport()
   IFS=' ,'
   for sport in $SHAPER_LOCAL_SERVER_PORTS; do
     if [ "$sport" = "$pport" ]; then
-      iptables -t mangle -A SHAPER_CHAIN -m $proto -p $proto --sport $port -j CLASSIFY \
-        --set-class $class
-      iptables -t mangle -A SHAPER_CHAIN -m $proto -p $proto --sport $port -j RETURN
+      nft_rule SHAPER_CHAIN "meta l4proto $proto th sport $port meta priority set $class"
+      nft_rule SHAPER_CHAIN "meta l4proto $proto th sport $port return"
       break
     fi
   done
@@ -117,34 +115,16 @@ classify_special_packets()
 {
   # To speed up downloads while an upload is going on, put short ACK
   # packets in the high priority class:
-  iptables -t mangle -A SHAPER_CHAIN \
-    -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK ACK \
-    -m length --length :64 \
-    -j CLASSIFY --set-class 1:10
-  iptables -t mangle -A SHAPER_CHAIN \
-    -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK ACK \
-    -m length --length :64 \
-    -j RETURN
+  nft_rule SHAPER_CHAIN "tcp flags & (fin|syn|rst|ack) == ack meta length 0-64 meta l4proto tcp meta priority set 1:10"
+  nft_rule SHAPER_CHAIN "tcp flags & (fin|syn|rst|ack) == ack meta length 0-64 meta l4proto tcp return"
 
   # put large (512+) icmp packets in bulk category
-  iptables -t mangle -A SHAPER_CHAIN \
-    -p icmp \
-    -m length --length 512: \
-    -j CLASSIFY --set-class 1:50
-  iptables -t mangle -A SHAPER_CHAIN \
-    -p icmp \
-    -m length --length 512: \
-    -j RETURN
+  nft_rule SHAPER_CHAIN "meta length 512-65535 meta l4proto { icmp, ipv6-icmp } meta priority set 1:50"
+  nft_rule SHAPER_CHAIN "meta length 512-65535 meta l4proto { icmp, ipv6-icmp } return"
 
   # ICMP in the high priority class
-  iptables -t mangle -A SHAPER_CHAIN \
-    -p icmp \
-    -m length --length :512 \
-    -j CLASSIFY --set-class 1:10
-  iptables -t mangle -A SHAPER_CHAIN \
-    -p icmp \
-    -m length --length :512 \
-    -j RETURN
+  nft_rule SHAPER_CHAIN "meta length 0-512 meta l4proto { icmp, ipv6-icmp } meta priority set 1:10"
+  nft_rule SHAPER_CHAIN "meta length 0-512 meta l4proto { icmp, ipv6-icmp } return"
 }
 
 
@@ -153,26 +133,39 @@ classify_by_dscp_class()
   # Classify by DSCP class
   # Assume VoIP audio is marked as EF, and SIP as CS3
 
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class CS7 -j CLASSIFY --set-class 1:10
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class CS6 -j CLASSIFY --set-class 1:10
+  nft_rule SHAPER_CHAIN "ip dscp cs7 meta priority set 1:10"
+  nft_rule SHAPER_CHAIN "ip6 dscp cs7 meta priority set 1:10"
+  nft_rule SHAPER_CHAIN "ip dscp cs6 meta priority set 1:10"
+  nft_rule SHAPER_CHAIN "ip6 dscp cs6 meta priority set 1:10"
 
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class EF -j CLASSIFY --set-class 1:20
+  nft_rule SHAPER_CHAIN "ip dscp ef meta priority set 1:20"
+  nft_rule SHAPER_CHAIN "ip6 dscp ef meta priority set 1:20"
 
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class CS5 -j CLASSIFY --set-class 1:30
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class CS4 -j CLASSIFY --set-class 1:30
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class AF41 -j CLASSIFY --set-class 1:30
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class AF42 -j CLASSIFY --set-class 1:30
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class AF43 -j CLASSIFY --set-class 1:30
+  nft_rule SHAPER_CHAIN "ip dscp cs5 meta priority set 1:30"
+  nft_rule SHAPER_CHAIN "ip6 dscp cs5 meta priority set 1:30"
+  nft_rule SHAPER_CHAIN "ip dscp cs4 meta priority set 1:30"
+  nft_rule SHAPER_CHAIN "ip6 dscp cs4 meta priority set 1:30"
+  nft_rule SHAPER_CHAIN "ip dscp af41 meta priority set 1:30"
+  nft_rule SHAPER_CHAIN "ip6 dscp af41 meta priority set 1:30"
+  nft_rule SHAPER_CHAIN "ip dscp af42 meta priority set 1:30"
+  nft_rule SHAPER_CHAIN "ip6 dscp af42 meta priority set 1:30"
+  nft_rule SHAPER_CHAIN "ip dscp af43 meta priority set 1:30"
+  nft_rule SHAPER_CHAIN "ip6 dscp af43 meta priority set 1:30"
 
   # Default: --set-class 1:40
   # CS0, CS3, AF31, AF32, AF33, AF21, AF22, AF23
 
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class CS2 -j CLASSIFY --set-class 1:50
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class AF11 -j CLASSIFY --set-class 1:50
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class AF12 -j CLASSIFY --set-class 1:50
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class AF13 -j CLASSIFY --set-class 1:50
+  nft_rule SHAPER_CHAIN "ip dscp cs2 meta priority set 1:50"
+  nft_rule SHAPER_CHAIN "ip6 dscp cs2 meta priority set 1:50"
+  nft_rule SHAPER_CHAIN "ip dscp af11 meta priority set 1:50"
+  nft_rule SHAPER_CHAIN "ip6 dscp af11 meta priority set 1:50"
+  nft_rule SHAPER_CHAIN "ip dscp af12 meta priority set 1:50"
+  nft_rule SHAPER_CHAIN "ip6 dscp af12 meta priority set 1:50"
+  nft_rule SHAPER_CHAIN "ip dscp af13 meta priority set 1:50"
+  nft_rule SHAPER_CHAIN "ip6 dscp af13 meta priority set 1:50"
 
-  iptables -t mangle -A SHAPER_CHAIN -m dscp --dscp-class CS1 -j CLASSIFY --set-class 1:60
+  nft_rule SHAPER_CHAIN "ip dscp cs1 meta priority set 1:60"
+  nft_rule SHAPER_CHAIN "ip6 dscp cs1 meta priority set 1:60"
 }
 
 
@@ -210,7 +203,7 @@ plugin_start_hfsc()
 
   printf "${INDENT}Shaping as (Down/Up) %d/%d kb/s using '%s' for interface(s): %s\n" $DOWNLINK $UPLINK hfsc "$SHAPER_IF"
 
-  iptables -t mangle -N SHAPER_CHAIN
+  nft_chain SHAPER_CHAIN
 
   classify_special_packets
 
@@ -265,7 +258,7 @@ plugin_start_hfsc()
     done
 
     # add SHAPER_CHAIN chain to mangle table in iptables
-    iptables -t mangle -A POSTROUTING -o $eif -j SHAPER_CHAIN
+    nft_rule MANGLE_POSTROUTING "$(nft_if oifname $eif) jump SHAPER_CHAIN"
   done
 
   return $retval
@@ -282,7 +275,7 @@ plugin_start_htb()
 
   printf "${INDENT}Shaping as (Down/Up) %d/%d kb/s using '%s' for interface(s): %s\n" $DOWNLINK $UPLINK htb "$SHAPER_IF"
 
-  iptables -t mangle -N SHAPER_CHAIN
+  nft_chain SHAPER_CHAIN
 
   classify_special_packets
 
@@ -331,7 +324,7 @@ plugin_start_htb()
     done
 
     # add SHAPER_CHAIN chain to mangle table in iptables
-    iptables -t mangle -A POSTROUTING -o $eif -j SHAPER_CHAIN
+    nft_rule MANGLE_POSTROUTING "$(nft_if oifname $eif) jump SHAPER_CHAIN"
   done
 
   return $retval
@@ -351,11 +344,8 @@ plugin_cleanup()
     done
 
     # Flush and delete tables
-    iptables -t mangle -D POSTROUTING -o $eif -j SHAPER_CHAIN 2>/dev/null
   done
 
-  iptables -t mangle -F SHAPER_CHAIN 2>/dev/null
-  iptables -t mangle -X SHAPER_CHAIN 2>/dev/null
 }
 
 
@@ -429,8 +419,8 @@ plugin_status()
   done
 
   echo ""
-  echo "${INDENT}[iptables]"
-  iptables -t mangle -L SHAPER_CHAIN -v -x 2>/dev/null |sed -e "s/^/$INDENT/"
+  echo "${INDENT}[nftables]"
+  $NFT list chain inet $NFT_TABLE SHAPER_CHAIN 2>/dev/null |sed -e "s/^/$INDENT/"
 
   return $retval
 }

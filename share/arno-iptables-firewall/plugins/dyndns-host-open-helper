@@ -15,7 +15,7 @@ dyndns_host_open_helper_sanity_check()
   fi
 
   # Check whether chain exists
-  if ! ip4tables -nL DYNDNS_CHAIN >/dev/null 2>&1; then
+  if ! $NFT list chain inet $NFT_TABLE DYNDNS_CHAIN >/dev/null 2>&1; then
     echo "** ERROR: DYNDNS_CHAIN does not exist! **" >&2
     return 1
   fi
@@ -34,8 +34,9 @@ dyndns_host_open_helper_do_work()
 {
   local RETVAL=0
 
-  # Flush the DYNDNS_CHAIN
-  iptables -F DYNDNS_CHAIN
+  # Rebuild the DYNDNS_CHAIN in one atomic update
+  nft_begin update
+  nft_cmd "flush chain inet $NFT_TABLE DYNDNS_CHAIN"
 
   # Add TCP ports to allow for certain hosts
   ##########################################
@@ -57,7 +58,7 @@ dyndns_host_open_helper_do_work()
           for host_ip2 in $host_ip; do
             for destip in $destips; do
               for port in $ports; do
-                iptables -A DYNDNS_CHAIN $(ipt_if -i "$interface") -s $host_ip2 -d $destip -p tcp --dport $port -j ACCEPT
+                nft_rule DYNDNS_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host_ip2) $(nft_addr daddr $destip) tcp dport $port accept"
               done
             done
           done
@@ -86,7 +87,7 @@ dyndns_host_open_helper_do_work()
           for host_ip2 in $host_ip; do
             for destip in $destips; do
               for port in $ports; do
-                iptables -A DYNDNS_CHAIN $(ipt_if -i "$interface") -s $host_ip2 -d $destip -p udp --dport $port -j ACCEPT
+                nft_rule DYNDNS_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host_ip2) $(nft_addr daddr $destip) udp dport $port accept"
               done
             done
           done
@@ -115,7 +116,7 @@ dyndns_host_open_helper_do_work()
           for host_ip2 in $host_ip; do
             for destip in $destips; do
               for proto in $protos; do
-                iptables -A DYNDNS_CHAIN $(ipt_if -i "$interface") -s $host_ip2 -d $destip -p $proto -j ACCEPT
+                nft_rule DYNDNS_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host_ip2) $(nft_addr daddr $destip) meta l4proto $proto accept"
               done
             done
           done
@@ -143,13 +144,18 @@ dyndns_host_open_helper_do_work()
         for interface in $interfaces; do
           for host_ip2 in $host_ip; do
             for destip in $destips; do
-              iptables -A DYNDNS_CHAIN $(ipt_if -i "$interface") -s $host_ip2 -d $destip -p icmp --icmp-type echo-request -j ACCEPT
+              nft_rule DYNDNS_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host_ip2) $(nft_addr daddr $destip) icmp type echo-request accept"
+              nft_rule DYNDNS_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host_ip2) $(nft_addr daddr $destip) icmpv6 type echo-request accept"
             done
           done
         done
       done
     fi
   done
+
+  if ! nft_commit; then
+    RETVAL=1
+  fi
 
   return $RETVAL
 }

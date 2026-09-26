@@ -47,14 +47,11 @@ parasitic_net_init()
 {
   local IFS host if_ip snat_if snat_ip snat_ifs_ips snat_if_subnet
 
-  ip4tables -t nat -N PARASITIC_NET_SNAT 2>/dev/null
-  ip4tables -t nat -F PARASITIC_NET_SNAT
+  nft_chain PARASITIC_NET_SNAT
 
-  ip4tables -N PARASITIC_NET_ACL 2>/dev/null
-  ip4tables -F PARASITIC_NET_ACL
+  nft_chain PARASITIC_NET_ACL
 
-  ip4tables -N PARASITIC_NET_FORWARD 2>/dev/null
-  ip4tables -F PARASITIC_NET_FORWARD
+  nft_chain PARASITIC_NET_FORWARD
 
   if [ -z "$PARASITIC_NET_IF" ]; then
     PARASITIC_NET_IF="$EXT_IF"
@@ -99,8 +96,8 @@ parasitic_net_init()
   # Filter traffic related to the Parasitic Network
   echo "${INDENT}Allowing parasitic network access for client host(s): $PARASITIC_NET_CLIENT_HOSTS"
   IFS=' ,'
-  for host in $(ip_range $PARASITIC_NET_CLIENT_HOSTS); do
-    ip4tables -A PARASITIC_NET_FORWARD -s $host -j PARASITIC_NET_ACL
+  for host in $(nft_hosts $PARASITIC_NET_CLIENT_HOSTS); do
+    nft_rule PARASITIC_NET_FORWARD "meta nfproto ipv4 $(nft_addr saddr $host) jump PARASITIC_NET_ACL"
   done
 
   # Enable forwarding on the SNAT interfaces.
@@ -108,14 +105,14 @@ parasitic_net_init()
   IFS=' ,'
   for if_ip in $(wildcard_ifs $PARASITIC_NET_IF); do
     snat_if="$(echo "$if_ip" |cut -d'~' -f1)"
-    ip4tables -A POST_FORWARD_CHAIN -i $snat_if -o $snat_if -j PARASITIC_NET_FORWARD
+    nft_rule POST_FORWARD_CHAIN "meta nfproto ipv4 $(nft_if iifname $snat_if) $(nft_if oifname $snat_if) jump PARASITIC_NET_FORWARD"
   done
 
   # We do not want traffic generated on this machine to be NAT-ed, so skip all SNAT interface IPv4's
   IFS=' '
   for if_ip in $snat_ifs_ips; do
     snat_ip="$(echo "$if_ip" |cut -d'~' -f2)"
-    ip4tables -t nat -A PARASITIC_NET_SNAT -s $snat_ip -j RETURN
+    nft_rule PARASITIC_NET_SNAT "meta nfproto ipv4 $(nft_addr saddr $snat_ip) return"
   done
 
   IFS=' '
@@ -124,13 +121,13 @@ parasitic_net_init()
     snat_ip="$(echo "$if_ip" |cut -d'~' -f2)"
 
     IFS=' ,'
-    for host in $(ip_range $PARASITIC_NET_CLIENT_HOSTS); do
-      ip4tables -t nat -A PARASITIC_NET_SNAT -o $snat_if -s $host -j SNAT --to-source $snat_ip
+    for host in $(nft_hosts $PARASITIC_NET_CLIENT_HOSTS); do
+      nft_rule PARASITIC_NET_SNAT "meta nfproto ipv4 $(nft_if oifname $snat_if) $(nft_addr saddr $host) snat ip to $snat_ip"
     done
   done
 
   # Hook into the POST POSTROUTING NAT chain
-  ip4tables -t nat -A POST_NAT_POSTROUTING_CHAIN -j PARASITIC_NET_SNAT
+  nft_rule POST_NAT_POSTROUTING_CHAIN "meta nfproto ipv4 jump PARASITIC_NET_SNAT"
 
   # Create background job
   if ! job_add "$JOB_NAME" "${PARASITIC_NET_TIME:-60}" "$JOB_HELPER_SCRIPT"; then
@@ -166,17 +163,6 @@ plugin_restart()
 # Plugin stop function
 plugin_stop()
 {
-  ip4tables -t nat -D POST_NAT_POSTROUTING_CHAIN -j PARASITIC_NET_SNAT
-
-  ip4tables -t nat -F PARASITIC_NET_SNAT
-  ip4tables -t nat -X PARASITIC_NET_SNAT 2>/dev/null
-
-  ip4tables -F PARASITIC_NET_ACL
-  ip4tables -X PARASITIC_NET_ACL 2>/dev/null
-
-  ip4tables -F PARASITIC_NET_FORWARD
-  ip4tables -X PARASITIC_NET_FORWARD 2>/dev/null
-
   return 0
 }
 
@@ -186,19 +172,19 @@ plugin_status()
 {
   echo "  Interface forward policy:"
   echo "  =============================="
-  ip4tables -nv -L POST_FORWARD_CHAIN | awk '$3 == "PARASITIC_NET_FORWARD" { print "  "$3" "$6" "$7" "$8" "$9 }'
+  $NFT list chain inet $NFT_TABLE POST_FORWARD_CHAIN | sed -n -e 's/^[[:space:]]*\(.*jump PARASITIC_NET_FORWARD\)$/  \1/p'
   echo "  ------------------------------"
   echo ""
 
   echo "  Allowed client host(s):"
   echo "  =============================="
-  ip4tables -n -L PARASITIC_NET_FORWARD | awk '$1 == "PARASITIC_NET_ACL" { print "  "$4 }'
+  $NFT list chain inet $NFT_TABLE PARASITIC_NET_FORWARD | sed -n -e 's/^.* saddr \([^ ]*\) jump PARASITIC_NET_ACL$/  \1/p'
   echo "  ------------------------------"
   echo ""
 
   echo "  Access Control List(ACL):"
   echo "  =============================="
-  ip4tables -n -L PARASITIC_NET_ACL | sed -n -e 's/^ACCEPT.*$/  &/p' -e 's/^DROP.*$/  &/p'
+  $NFT list chain inet $NFT_TABLE PARASITIC_NET_ACL | sed -n -r -e 's/^[[:space:]]*(.*(accept|drop|reject))$/  \1/p'
   echo "  ------------------------------"
   echo ""
 

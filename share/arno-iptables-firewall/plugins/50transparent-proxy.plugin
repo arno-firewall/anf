@@ -39,7 +39,6 @@ plugin_start()
 {
   # Some required modules are already loaded by the main script:
   modprobe_multi nf_nat ip_nat
-  modprobe iptable_nat
 
   # Setup (transparent) proxy settings:
   #####################################
@@ -47,7 +46,7 @@ plugin_start()
     echo "${INDENT}Redirecting all internal FTP(port 21) traffic to proxy-port $FTP_PROXY_PORT"
     IFS=' ,'
     for interface in $INT_IF; do
-      ip4tables -t nat -A PREROUTING -i $interface -p tcp --dport 21 -j REDIRECT --to-ports $FTP_PROXY_PORT
+      nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $interface) tcp dport 21 redirect to :$FTP_PROXY_PORT"
     done
   fi
 
@@ -55,7 +54,7 @@ plugin_start()
     echo "${INDENT}Redirecting all internal SMTP(port 25) traffic to proxy-port $SMTP_PROXY_PORT"
     IFS=' ,'
     for interface in $INT_IF; do
-      ip4tables -t nat -A PREROUTING -i $interface -p tcp --dport 25 -j REDIRECT --to-ports $SMTP_PROXY_PORT
+      nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $interface) tcp dport 25 redirect to :$SMTP_PROXY_PORT"
     done
   fi
 
@@ -63,7 +62,7 @@ plugin_start()
     echo "${INDENT}Redirecting all internal HTTP(port 80) traffic to proxy-port $HTTP_PROXY_PORT"
     IFS=' ,'
     for interface in $INT_IF; do
-      ip4tables -t nat -A PREROUTING -i $interface -p tcp --dport 80 -j REDIRECT --to-ports $HTTP_PROXY_PORT
+      nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $interface) tcp dport 80 redirect to :$HTTP_PROXY_PORT"
     done
   fi
 
@@ -71,7 +70,7 @@ plugin_start()
     echo "${INDENT}Redirecting all internal POP3(port 110) traffic to proxy-port $POP3_PROXY_PORT"
     IFS=' ,'
     for interface in $INT_IF; do
-      ip4tables -t nat -A PREROUTING -i $interface -p tcp --dport 110 -j REDIRECT --to-ports $POP3_PROXY_PORT
+      nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $interface) tcp dport 110 redirect to :$POP3_PROXY_PORT"
     done
   fi
 
@@ -79,7 +78,7 @@ plugin_start()
     echo "${INDENT}Redirecting all internal HTTPs(port 443) traffic to proxy-port $HTTPS_PROXY_PORT"
     IFS=' ,'
     for interface in $INT_IF; do
-      ip4tables -t nat -A PREROUTING -i $interface -p tcp --dport 443 -j REDIRECT --to-ports $HTTPS_PROXY_PORT
+      nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $interface) tcp dport 443 redirect to :$HTTPS_PROXY_PORT"
     done
   fi
 

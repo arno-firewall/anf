@@ -37,15 +37,14 @@ plugin_start()
 {
   # Forward all traffic that doesn't match an explicit port-forward to the
   # DMZ host.
-  ip4tables -t nat -N NAT_PREROUTING_LOCAL 2>/dev/null
-  ip4tables -t nat -F NAT_PREROUTING_LOCAL
+  nft_chain NAT_PREROUTING_LOCAL
 
-  ip4tables -t nat -A POST_NAT_PREROUTING_CHAIN -j NAT_PREROUTING_LOCAL
+  nft_rule POST_NAT_PREROUTING_CHAIN "meta nfproto ipv4 jump NAT_PREROUTING_LOCAL"
 
   # bail if ICMP...
   IFS=' ,'
   for eif in ${NAT_IF:-$EXT_IF}; do
-    ip4tables -t nat -A NAT_PREROUTING_LOCAL -i $eif -p icmp -j RETURN
+    nft_rule NAT_PREROUTING_LOCAL "meta nfproto ipv4 $(nft_if iifname $eif) meta l4proto icmp return"
   done
 
   local open_tcp="" open_udp="" open_ip=""
@@ -61,11 +60,11 @@ plugin_start()
     if parse_rule "$rule" HOST_OPEN_TCP "interfaces-destips-hosts-ports"; then
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
-              ip4tables -t nat -A NAT_PREROUTING_LOCAL $(ipt_if -i "$interface") -s $host -d $destip -p tcp --dport $port -j RETURN
+              nft_rule NAT_PREROUTING_LOCAL "meta nfproto ipv4 $(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) tcp dport $port return"
             done
           done
         done
@@ -82,11 +81,11 @@ plugin_start()
     if parse_rule "$rule" HOST_OPEN_UDP "interfaces-destips-hosts-ports"; then
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
-              ip4tables -t nat -A NAT_PREROUTING_LOCAL $(ipt_if -i "$interface") -s $host -d $destip -p udp --dport $port -j RETURN
+              nft_rule NAT_PREROUTING_LOCAL "meta nfproto ipv4 $(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) udp dport $port return"
             done
           done
         done
@@ -103,11 +102,11 @@ plugin_start()
     if parse_rule "$rule" HOST_OPEN_IP "interfaces-destips-hosts-protos"; then
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for proto in $protos; do
           for destip in $destips; do
             for interface in $interfaces; do
-              ip4tables -t nat -A NAT_PREROUTING_LOCAL $(ipt_if -i "$interface") -s $host -d $destip -p $proto -j RETURN
+              nft_rule NAT_PREROUTING_LOCAL "meta nfproto ipv4 $(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) meta l4proto $proto return"
             done
           done
         done
@@ -121,8 +120,8 @@ plugin_start()
 
   IFS=' ,'
   for eif in ${NAT_IF:-$EXT_IF}; do
-    ip4tables -t nat -A NAT_PREROUTING_LOCAL -i $eif -j DNAT --to-destination $DMZ_IP
-    ip4tables -A POST_FORWARD_CHAIN -i $eif -d $DMZ_IP -j ACCEPT
+    nft_rule NAT_PREROUTING_LOCAL "meta nfproto ipv4 $(nft_if iifname $eif) dnat ip to $DMZ_IP"
+    nft_rule POST_FORWARD_CHAIN "meta nfproto ipv4 $(nft_if iifname $eif) $(nft_addr daddr $DMZ_IP) accept"
   done
 
   return 0
@@ -132,16 +131,6 @@ plugin_start()
 # Plugin stop function
 plugin_stop()
 {
-  ip4tables -t nat -D POST_NAT_PREROUTING_CHAIN -j NAT_PREROUTING_LOCAL
-
-  ip4tables -t nat -F NAT_PREROUTING_LOCAL
-  ip4tables -t nat -X NAT_PREROUTING_LOCAL 2>/dev/null
-
-  IFS=' ,'
-  for eif in ${NAT_IF:-$EXT_IF}; do
-    ip4tables -D POST_FORWARD_CHAIN -i $eif -d $DMZ_IP -j ACCEPT
-  done
-
   return 0
 }
 

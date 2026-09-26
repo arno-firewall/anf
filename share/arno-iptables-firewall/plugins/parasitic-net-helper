@@ -9,7 +9,7 @@ PLUGIN_RET_VAL=0
 parasitic_net_helper_sanity_check()
 {
   # Check whether chain exists
-  if ! ip4tables -nL PARASITIC_NET_ACL >/dev/null 2>&1; then
+  if ! $NFT list chain inet $NFT_TABLE PARASITIC_NET_ACL >/dev/null 2>&1; then
     echo "** ERROR: PARASITIC_NET_ACL does not exist! **" >&2
     return 1
   fi
@@ -20,10 +20,14 @@ parasitic_net_helper_sanity_check()
 
 parasitic_net_helper_do_work()
 {
-  local RETVAL=0
+  local RETVAL=0 deny_verdict
 
-  # Flush the PARASITIC_NET_ACL
-  iptables -F PARASITIC_NET_ACL
+  # DROP or REJECT
+  deny_verdict="$(echo "$PARASITIC_NET_DENY_POLICY" |tr 'A-Z' 'a-z')"
+
+  # Rebuild the PARASITIC_NET_ACL in one atomic update
+  nft_begin update
+  nft_cmd "flush chain inet $NFT_TABLE PARASITIC_NET_ACL"
 
   unset IFS
   for rule in $PARASITIC_NET_HOST_DENY_TCP; do
@@ -31,7 +35,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Denying access from $shosts to $dhosts for TCP port(s): $ports"
 
       IFS=' ,'
-      for dhost in `ip_range "$dhosts"`; do
+      for dhost in `nft_hosts "$dhosts"`; do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping TCP deny rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -39,14 +43,13 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `ip_range "$shosts"`; do
+          for shost_ip in `nft_hosts "$shosts"`; do
             for port in $ports; do
               if [ "$PARASITIC_NET_DENY_LOG" = "1" ]; then
-                ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p tcp --dport $port -m limit --limit 1/m -j LOG \
-                  --log-level $LOGLEVEL --log-prefix "AIF:Parasitic-net denied: "
+                nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) tcp dport $port limit rate 1/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
               fi
 
-              ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p tcp --dport $port -j $PARASITIC_NET_DENY_POLICY
+              nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) tcp dport $port $deny_verdict"
             done
           done
         done
@@ -60,7 +63,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Denying access from $shosts to $dhosts for UDP port(s): $ports"
 
       IFS=' ,'
-      for dhost in `ip_range "$dhosts"`; do
+      for dhost in `nft_hosts "$dhosts"`; do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping UDP deny rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -68,14 +71,13 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `ip_range "$shosts"`; do
+          for shost_ip in `nft_hosts "$shosts"`; do
             for port in $ports; do
               if [ "$PARASITIC_NET_DENY_LOG" = "1" ]; then
-                ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p udp --dport $port -m limit --limit 1/m -j LOG \
-                  --log-level $LOGLEVEL --log-prefix "AIF:Parasitic-net denied: "
+                nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) udp dport $port limit rate 1/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
               fi
 
-              ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p udp --dport $port -j $PARASITIC_NET_DENY_POLICY
+              nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) udp dport $port $deny_verdict"
             done
           done
         done
@@ -89,7 +91,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Denying access from $shosts to $dhosts for ICMP requests"
 
       IFS=' ,'
-      for dhost in `ip_range "$dhosts"`; do
+      for dhost in `nft_hosts "$dhosts"`; do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping ICMP deny rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -97,13 +99,12 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `ip_range "$shosts"`; do
+          for shost_ip in `nft_hosts "$shosts"`; do
             if [ "$PARASITIC_NET_DENY_LOG" = "1" ]; then
-              ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p icmp --icmp-type echo-request -m limit --limit 1/m -j LOG \
-                --log-level $LOGLEVEL --log-prefix "AIF:Parasitic-net denied: "
+              nft_rule PARASITIC_NET_ACL "$(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) icmp type echo-request limit rate 1/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
             fi
 
-            ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p icmp --icmp-type echo-request -j $PARASITIC_NET_DENY_POLICY
+            nft_rule PARASITIC_NET_ACL "$(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) icmp type echo-request $deny_verdict"
           done
         done
       done
@@ -116,7 +117,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Denying access from $shosts to $dhosts for IP protocol(s): $protos"
 
       IFS=' ,'
-      for dhost in `ip_range "$dhosts"`; do
+      for dhost in `nft_hosts "$dhosts"`; do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping IP deny rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -124,14 +125,13 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `ip_range "$shosts"`; do
+          for shost_ip in `nft_hosts "$shosts"`; do
             for proto in $protos; do
               if [ "$PARASITIC_NET_DENY_LOG" = "1" ]; then
-                ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p $proto -m limit --limit 1/m -j LOG \
-                  --log-level $LOGLEVEL --log-prefix "AIF:Parasitic-net denied: "
+                nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) meta l4proto $proto limit rate 1/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
               fi
 
-              ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p $proto -j $PARASITIC_NET_DENY_POLICY
+              nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) meta l4proto $proto $deny_verdict"
             done
           done
         done
@@ -145,7 +145,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Allowing access from $shosts to $dhosts for TCP port(s): $ports"
 
       IFS=' ,'
-      for dhost in `ip_range "$dhosts"`; do
+      for dhost in `nft_hosts "$dhosts"`; do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping TCP allow rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -153,9 +153,9 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `ip_range "$shosts"`; do
+          for shost_ip in `nft_hosts "$shosts"`; do
             for port in $ports; do
-              ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p tcp --dport $port -j ACCEPT
+              nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) tcp dport $port accept"
             done
           done
         done
@@ -169,7 +169,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Allowing access from $shosts to $dhosts for UDP port(s): $ports"
 
       IFS=' ,'
-      for dhost in `ip_range "$dhosts"`; do
+      for dhost in `nft_hosts "$dhosts"`; do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping UDP allow rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -177,9 +177,9 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `ip_range "$shosts"`; do
+          for shost_ip in `nft_hosts "$shosts"`; do
             for port in $ports; do
-              ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p udp --dport $port -j ACCEPT
+              nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) udp dport $port accept"
             done
           done
         done
@@ -194,7 +194,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Allowing access from $shosts to $dhosts for ICMP requests"
 
       IFS=' ,'
-      for dhost in `ip_range "$dhosts"`; do
+      for dhost in `nft_hosts "$dhosts"`; do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping ICMP allow rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -203,7 +203,7 @@ parasitic_net_helper_do_work()
 
         for dhost_ip in $host_ip; do
           for shost_ip in $shosts; do
-            ip4tables -A PARASITIC_NET_ACL -s $shost_ip -d $dhost_ip -p icmp --icmp-type echo-request -j ACCEPT
+            nft_rule PARASITIC_NET_ACL "$(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) icmp type echo-request accept"
           done
         done
       done
@@ -216,7 +216,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Allowing access from $shosts to $dhosts for IP protocol(s): $protos"
 
       IFS=' ,'
-      for dhost in `ip_range "$dhosts"`; do
+      for dhost in `nft_hosts "$dhosts"`; do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping IP allow rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -226,7 +226,7 @@ parasitic_net_helper_do_work()
         for dhost_ip in $host_ip; do
           for shost_ip in $shosts; do
             for proto in $protos; do
-              ip4tables -A PARASITIC_NET_ACL -d $dhost_ip -p $proto -j ACCEPT
+              nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr daddr $dhost_ip) meta l4proto $proto accept"
             done
           done
         done
@@ -236,44 +236,44 @@ parasitic_net_helper_do_work()
 
   # Set default policy
   if [ -z "$PARASITIC_NET_HOST_OPEN_TCP" ]; then
-    ip4tables -A PARASITIC_NET_ACL -p tcp -j ACCEPT
+    nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 meta l4proto tcp accept"
   else
     if [ "$PARASITIC_NET_DENY_LOG" != "0" ]; then
-      ip4tables -A PARASITIC_NET_ACL -p tcp -m limit --limit 12/m -j LOG \
-        --log-level $LOGLEVEL --log-prefix "AIF:Parasitic-net denied: "
+      nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 meta l4proto tcp limit rate 12/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
     fi
 
-    ip4tables -A PARASITIC_NET_ACL -p tcp -j $PARASITIC_NET_DENY_POLICY
+    nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 meta l4proto tcp $deny_verdict"
   fi
 
   if [ -z "$PARASITIC_NET_HOST_OPEN_UDP" ]; then
-    ip4tables -A PARASITIC_NET_ACL -p udp -j ACCEPT
+    nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 meta l4proto udp accept"
   else
     if [ "$PARASITIC_NET_DENY_LOG" != "0" ]; then
-      ip4tables -A PARASITIC_NET_ACL -p udp -m limit --limit 12/m -j LOG \
-        --log-level $LOGLEVEL --log-prefix "AIF:Parasitic-net denied: "
+      nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 meta l4proto udp limit rate 12/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
     fi
 
-    ip4tables -A PARASITIC_NET_ACL -p udp -j $PARASITIC_NET_DENY_POLICY
+    nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 meta l4proto udp $deny_verdict"
   fi
 
   if [ -z "$PARASITIC_NET_HOST_OPEN_ICMP" ]; then
-    ip4tables -A PARASITIC_NET_ACL -p icmp --icmp-type echo-request -j ACCEPT
+    nft_rule PARASITIC_NET_ACL "icmp type echo-request accept"
   else
     if [ "$PARASITIC_NET_DENY_LOG" != "0" ]; then
-      ip4tables -A PARASITIC_NET_ACL -p icmp --icmp-type echo-request -m limit --limit 12/m -j LOG \
-        --log-level $LOGLEVEL --log-prefix "AIF:Parasitic-net denied: "
+      nft_rule PARASITIC_NET_ACL "icmp type echo-request limit rate 12/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
     fi
 
-    ip4tables -A PARASITIC_NET_ACL -p icmp --icmp-type echo-request -j $PARASITIC_NET_DENY_POLICY
+    nft_rule PARASITIC_NET_ACL "icmp type echo-request $deny_verdict"
   fi
 
   # Drop the rest ("Other" IP protocols always need to be specified explicitly)
   if [ "$PARASITIC_NET_DENY_LOG" != "0" ]; then
-    ip4tables -A PARASITIC_NET_ACL -m limit --limit 12/m -j LOG \
-      --log-level $LOGLEVEL --log-prefix "AIF:Parasitic-net denied: "
+    nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 limit rate 12/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
   fi
-  ip4tables -A PARASITIC_NET_ACL -j $PARASITIC_NET_DENY_POLICY
+  nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $deny_verdict"
+
+  if ! nft_commit; then
+    RETVAL=1
+  fi
 
   return $RETVAL
 }

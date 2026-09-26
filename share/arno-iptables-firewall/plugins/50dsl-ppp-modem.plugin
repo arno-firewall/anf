@@ -39,16 +39,13 @@ plugin_start()
 
     # Anti spoof protection for the modem net
     #########################################
-    ip4tables -A SPOOF_CHK ! -i $MODEM_IF -s "$MODEM_IF_IP/24" \
-        -m limit --limit 3/m -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Spoofed (MODEM) packet: "
-    ip4tables -A SPOOF_CHK ! -i $MODEM_IF -s "$MODEM_IF_IP/24" -j DROP
+    nft_rule SPOOF_CHK "meta nfproto ipv4 $(nft_if iifname $MODEM_IF !=) $(nft_addr saddr "$MODEM_IF_IP/24") limit rate 3/minute burst 5 packets log prefix \"AIF:Spoofed (MODEM) packet: \" level $LOGLEVEL"
+    nft_rule SPOOF_CHK "meta nfproto ipv4 $(nft_if iifname $MODEM_IF !=) $(nft_addr saddr "$MODEM_IF_IP/24") drop"
   fi
 
   # Create & flush our modem chain
-  ip4tables -N MODEM_CHAIN 2>/dev/null
-  ip4tables -F MODEM_CHAIN
-  ip4tables -N MODEM_CHAIN_HOOK 2>/dev/null
-  ip4tables -F MODEM_CHAIN_HOOK
+  nft_chain MODEM_CHAIN
+  nft_chain MODEM_CHAIN_HOOK
 
 
   # This is only used if you have a (A)DSL modem using ppp (connected to an
@@ -60,48 +57,47 @@ plugin_start()
 
       # Only allow traffic from the MODEM (check IP) to this machine
       ##############################################################
-      ip4tables -A MODEM_CHAIN -s $MODEM_IP -d $MODEM_IF_IP -j ACCEPT
+      nft_rule MODEM_CHAIN "meta nfproto ipv4 $(nft_addr saddr $MODEM_IP) $(nft_addr daddr $MODEM_IF_IP) accept"
     else
       # Only allow traffic from the MODEM (no IP, so no checking) to this machine
       ###########################################################################
-      ip4tables -A MODEM_CHAIN -d $MODEM_IF_IP -j ACCEPT
+      nft_rule MODEM_CHAIN "meta nfproto ipv4 $(nft_addr daddr $MODEM_IF_IP) accept"
     fi
   elif [ -n "$MODEM_IP" ]; then
     echo "${INDENT}Using MODEM IP $MODEM_IP"
 
     # Only allow traffic from the MODEM (check IP) to this machine
     ##############################################################
-    ip4tables -A MODEM_CHAIN -s $MODEM_IP -j ACCEPT
+    nft_rule MODEM_CHAIN "meta nfproto ipv4 $(nft_addr saddr $MODEM_IP) accept"
   else
     # Only allow traffic from the MODEM (no IP, so no checking) to this machine
     ###########################################################################
-    ip4tables -A MODEM_CHAIN -j ACCEPT
+    nft_rule MODEM_CHAIN "meta nfproto ipv4 accept"
   fi
 
   # Allow DHCP packets
-  ip4tables -A MODEM_CHAIN -s 0.0.0.0 -d 255.255.255.255 -p udp --sport 68 --dport 67 -j ACCEPT
+  nft_rule MODEM_CHAIN "ip saddr 0.0.0.0 ip daddr 255.255.255.255 udp sport 68 udp dport 67 accept"
   
   # Everything else is logged & dropped
-  ip4tables -A MODEM_CHAIN \
-    -m limit --limit 1/s -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Dropped MODEM packet: "
-  ip4tables -A MODEM_CHAIN -j DROP
+  nft_rule MODEM_CHAIN "meta nfproto ipv4 limit rate 1/second burst 5 packets log prefix \"AIF:Dropped MODEM packet: \" level $LOGLEVEL"
+  nft_rule MODEM_CHAIN "meta nfproto ipv4 drop"
   
   IFS=' ,'
   for interface in $MODEM_IF; do
-    ip4tables -A MODEM_CHAIN_HOOK -i $interface -j MODEM_CHAIN
+    nft_rule MODEM_CHAIN_HOOK "meta nfproto ipv4 $(nft_if iifname $interface) jump MODEM_CHAIN"
   done
 
   # Add our MODEM chain hook
-  ip4tables -A INPUT -j MODEM_CHAIN_HOOK
+  nft_rule INPUT "meta nfproto ipv4 jump MODEM_CHAIN_HOOK"
 
   # Manage your modemsettings from computers on your LAN. For example with your browser via http://{MODEM_IP}
   ###########################################################################################################
   if [ -n "$MODEM_IP" -a -n "$MODEM_INTERNAL_NET" ]; then
     echo "${INDENT}Enabling (ADSL) modem (@$MODEM_IP) management for hosts(s): $MODEM_INTERNAL_NET"
     IFS=' ,'
-    for net in `ip_range "$MODEM_INTERNAL_NET"`; do
-      ip4tables -A FORWARD -o $MODEM_IF -s $net -j ACCEPT
-      ip4tables -t nat -A POSTROUTING -o $MODEM_IF -s $net -d $MODEM_IP -j MASQUERADE
+    for net in `nft_hosts "$MODEM_INTERNAL_NET"`; do
+      nft_rule FORWARD "meta nfproto ipv4 $(nft_if oifname $MODEM_IF) $(nft_addr saddr $net) accept"
+      nft_rule POSTROUTING "meta nfproto ipv4 $(nft_if oifname $MODEM_IF) $(nft_addr saddr $net) $(nft_addr daddr $MODEM_IP) masquerade"
     done
   fi
 
@@ -112,14 +108,6 @@ plugin_start()
 # Plugin stop function
 plugin_stop()
 {
-  ip4tables -D INPUT -j MODEM_CHAIN_HOOK 2>/dev/null
-  
-  ip4tables -F MODEM_CHAIN_HOOK
-  ip4tables -X MODEM_CHAIN_HOOK 2>/dev/null
-
-  ip4tables -F MODEM_CHAIN
-  ip4tables -X MODEM_CHAIN 2>/dev/null
-  
   return 0
 }
 

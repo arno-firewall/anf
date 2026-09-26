@@ -12,46 +12,54 @@ VERBOSE=0
 traffic_accounting_helper_sanity_check()
 {
   # Check whether chains exists
-  if ! ip4tables -nL ACCOUNTING_INPUT_CHAIN >/dev/null 2>&1; then
+  if ! $NFT list chain inet $NFT_TABLE ACCOUNTING_INPUT_CHAIN >/dev/null 2>&1; then
     echo "** ERROR: ACCOUNTING_INPUT_CHAIN does not exist! **" >&2
     return 1
   fi
 
-  if ! ip4tables -nL ACCOUNTING_OUTPUT_CHAIN >/dev/null 2>&1; then
+  if ! $NFT list chain inet $NFT_TABLE ACCOUNTING_OUTPUT_CHAIN >/dev/null 2>&1; then
     echo "** ERROR: ACCOUNTING_OUTPUT_CHAIN does not exist! **" >&2
     return 1
   fi
-
-  # Check if chains inserted in the main chains
-#  if ! ip4tables -nL INPUT |grep -q '^ACCOUNTING_INPUT_CHAIN '; then
-#    echo "** ERROR: ACCOUNTING_INPUT_CHAIN is not inserted in the INPUT chain! **" >&2
-#    return 1
-#  fi
-
-#  if ! ip4tables -nL OUTPUT |grep -q '^ACCOUNTING_OUTPUT_CHAIN '; then
-#    echo "** ERROR: ACCOUNTING_OUTPUT_CHAIN is not inserted in the OUTPUT chain! **" >&2
-#    return 1
-#  fi
 
   return 0
 }
 
 
+# Usage: counter_bytes NAME
+# Prints the bytes of named counter NAME and resets it (0 if it doesn't exist)
+counter_bytes()
+{
+  local bytes
+
+  bytes="$($NFT reset counter inet $NFT_TABLE "$1" 2>/dev/null |sed -n -e 's/.*bytes \([0-9]*\).*/\1/p')"
+  echo "${bytes:-0}"
+}
+
+
 traffic_accounting_helper_do_work()
 {
-  local RETVAL=0
+  local RETVAL=0 host mon_host_ip name in_value out_value carry_in carry_out old_entry old_ip first LOG IFS
+  local used=" "
+
+  LOG="/var/log/traffic-accounting.log"
 
   # Touch the log file (just in case it doesn't exist yet):
-  touch /var/log/traffic-accounting.log
+  touch "$LOG"
 
   # Truncate file
   printf "" >/tmp/traffic-accounting.new
 
-  # Process the input chain
   if [ "$VERBOSE" = "1" ]; then
     echo "${INDENT}Traffic Accounting Hosts:"
     echo "${INDENT}-------------------------"
   fi
+
+  # Rebuild the accounting chains in one atomic update, the named counters
+  # keep counting while this runs and are read-and-reset per host IP
+  nft_begin update
+  nft_cmd "flush chain inet $NFT_TABLE ACCOUNTING_INPUT_CHAIN"
+  nft_cmd "flush chain inet $NFT_TABLE ACCOUNTING_OUTPUT_CHAIN"
 
   # Also include default unicast route addresses, (0.0.0.0/0 and ::/0)
   DEFAULT_ADDR="0.0.0.0/0"
@@ -61,196 +69,78 @@ traffic_accounting_helper_do_work()
 
   IFS=' ,'
   for host in $TRAFFIC_ACCOUNTING_HOSTS $DEFAULT_ADDR; do
-    old_entries="$(grep "^$host " /var/log/traffic-accounting.log)"
+    # Get host_ip, if it fails, skip rule
+    # Parse/get hostname. Try to use host cache if applicable
+    # NOTE: get_dynamic_host_cached returns hostname in $host_ip
+    if ! get_dynamic_host_cached $host || [ -z "$host_ip" ]; then
+      echo "** WARNING: Skipping rule for \"$host\"! **" >&2
+      RETVAL=1
+      continue
+    fi
 
-    # Process all entries for host
+    # Totals of IPs this host no longer has (eg. dynamic DNS) are carried over to its first current IP
+    carry_in=0
+    carry_out=0
     IFS=$EOL
-    for old_entry in $old_entries; do
+    for old_entry in $(grep "^$host " "$LOG"); do
       old_ip="$(echo "$old_entry" |cut -s -d' ' -f2)"
-      old_in_value="$(echo "$old_entry" |cut -s -d' ' -f3)"
-      old_out_value="$(echo "$old_entry" |cut -s -d' ' -f4)"
+      case " $(echo "$host_ip" |tr ',' ' ') " in
+        *" $old_ip "*) ;;
+        *) name="acct_$(echo "$host $old_ip" |tr -c 'A-Za-z0-9\n' '_')"
+           carry_in=$(( carry_in + $(echo "$old_entry" |cut -s -d' ' -f3 |grep . || echo 0) + $(counter_bytes ${name}_in) ))
+           carry_out=$(( carry_out + $(echo "$old_entry" |cut -s -d' ' -f4 |grep . || echo 0) + $(counter_bytes ${name}_out) ))
+           if $NFT list counter inet $NFT_TABLE ${name}_in >/dev/null 2>&1; then
+             nft_cmd "delete counter inet $NFT_TABLE ${name}_in"
+             nft_cmd "delete counter inet $NFT_TABLE ${name}_out"
+           fi
+           ;;
+      esac
+    done
 
-      # If value is non-existant make it zero
-      if [ -z "$old_in_value" ]; then
-        old_in_value=0
+    first=1
+    IFS=' ,'
+    for mon_host_ip in $host_ip; do
+      echo "${INDENT}Monitoring host \"$host\" with IP: $mon_host_ip"
+
+      # Counters are named after host and IP, eg. acct_example_com_192_0_2_1_in
+      name="acct_$(echo "$host $mon_host_ip" |tr -c 'A-Za-z0-9\n' '_')"
+
+      old_entry="$(grep "^$host $mon_host_ip " "$LOG" |head -n1)"
+      in_value=$(( $(echo "$old_entry" |cut -s -d' ' -f3 |grep . || echo 0) + $(counter_bytes ${name}_in) ))
+      out_value=$(( $(echo "$old_entry" |cut -s -d' ' -f4 |grep . || echo 0) + $(counter_bytes ${name}_out) ))
+      if [ $first -eq 1 ]; then
+        in_value=$((in_value + carry_in))
+        out_value=$((out_value + carry_out))
+        first=0
       fi
 
-      # If value is non-existant make it zero
-      if [ -z "$old_out_value" ]; then
-        old_out_value=0
+      nft_cmd "add counter inet $NFT_TABLE ${name}_in"
+      nft_cmd "add counter inet $NFT_TABLE ${name}_out"
+      nft_rule ACCOUNTING_INPUT_CHAIN "$(nft_addr saddr $mon_host_ip) counter name \"${name}_in\" return"
+      nft_rule ACCOUNTING_OUTPUT_CHAIN "$(nft_addr daddr $mon_host_ip) counter name \"${name}_out\" return"
+
+      if [ "$VERBOSE" = "1" ]; then
+        echo "${INDENT}  in=$in_value out=$out_value"
       fi
 
-      # Get host_ip, if it fails, skip rule
-      # Parse/get hostname. Try to use host cache if applicable
-      # NOTE: get_dynamic_host_cached returns hostname in $host_ip
-      if ! get_dynamic_host_cached $host || [ -z "$host_ip" ]; then
-        echo "** WARNING: Skipping rule for \"$host\"! **" >&2
-        RETVAL=1
-        continue
-      fi
-
-      IFS=' ,'
-      for mon_host_ip in $host_ip; do
-        echo "${INDENT}Monitoring host \"$host\" with IP: $mon_host_ip"
-
-        if [ "$VERBOSE" = "1" ]; then
-          printf "${INDENT}old_ip=$old_ip host_ip=$mon_host_ip "
-        fi
-
-        # Process input chain
-        OLDFOUND=0
-        if [ -n "$old_ip" ]; then
-          get_numeric_ip_version "$mon_host_ip"
-          case $? in
-          4)
-            LCOUNT=0
-            IFS=$EOL
-            for LINE in `ip4tables -xnvL ACCOUNTING_INPUT_CHAIN |sed -e "1,2d"`; do
-              ipt_ip="$(echo "$LINE" |awk '{ print $8 }')"
-
-              LCOUNT=$((LCOUNT + 1))
-              if [ "$ipt_ip" = "$old_ip" ]; then
-                ip4tables -R ACCOUNTING_INPUT_CHAIN $LCOUNT -s $mon_host_ip -j RETURN
-                if [ "$VERBOSE" = "1" ]; then
-                  printf "in_action=update "
-                fi
-                OLDFOUND=1
-                ipt_in_value="$(echo "$LINE" |awk '{ print $2 }')"
-
-                break
-              fi
-            done
-            ;;
-          6)
-            if [ "$IPV6_SUPPORT" = "1" ]; then
-              LCOUNT=0
-              IFS=$EOL
-              for LINE in `ip6tables -xnvL ACCOUNTING_INPUT_CHAIN |sed -e "1,2d"`; do
-                ipt_ip="$(echo "$LINE" |awk '{ print $7 }')"
-
-                LCOUNT=$((LCOUNT + 1))
-                if [ "$ipt_ip" = "$old_ip" ]; then
-                  ip6tables -R ACCOUNTING_INPUT_CHAIN $LCOUNT -s $mon_host_ip -j RETURN
-                  if [ "$VERBOSE" = "1" ]; then
-                    printf "in_action=update "
-                  fi
-                  OLDFOUND=1
-                  ipt_in_value="$(echo "$LINE" |awk '{ print $2 }')"
-
-                  break
-                fi
-              done
-            fi
-            ;;
-          esac
-        fi
-
-        if [ $OLDFOUND -eq 0 ]; then
-          if [ "$VERBOSE" = "1" ]; then
-            printf "in_action=add "
-          fi
-
-          if [ "$mon_host_ip" = "0.0.0.0/0" -o "$mon_host_ip" = "::/0" ]; then
-            iptables -A ACCOUNTING_INPUT_CHAIN -s $mon_host_ip -j RETURN
-          else
-            iptables -I ACCOUNTING_INPUT_CHAIN 1 -s $mon_host_ip -j RETURN
-          fi
-
-          # Preset values to zero as none exist yet
-          ipt_in_value=0
-        fi
-
-        # Process output chain
-        OLDFOUND=0
-        if [ -n "$old_ip" ]; then
-          get_numeric_ip_version "$mon_host_ip"
-          case $? in
-          4)
-            LCOUNT=0
-            IFS=$EOL
-            for LINE in `ip4tables -xnvL ACCOUNTING_OUTPUT_CHAIN |sed -e "1,2d"`; do
-              ipt_ip="$(echo "$LINE" |awk '{ print $9 }')"
-
-              LCOUNT=$((LCOUNT + 1))
-              if [ "$ipt_ip" = "$old_ip" ]; then
-                ip4tables -R ACCOUNTING_OUTPUT_CHAIN $LCOUNT -d $mon_host_ip -j RETURN
-                if [ "$VERBOSE" = "1" ]; then
-                  printf "out_action=update "
-                fi
-                OLDFOUND=1
-                ipt_out_value="$(echo "$LINE" |awk '{ print $2 }')"
-
-                break
-              fi
-            done
-            ;;
-          6)
-            if [ "$IPV6_SUPPORT" = "1" ]; then
-              LCOUNT=0
-              IFS=$EOL
-              for LINE in `ip6tables -xnvL ACCOUNTING_OUTPUT_CHAIN |sed -e "1,2d"`; do
-                ipt_ip="$(echo "$LINE" |awk '{ print $8 }')"
-
-                LCOUNT=$((LCOUNT + 1))
-                if [ "$ipt_ip" = "$old_ip" ]; then
-                  ip6tables -R ACCOUNTING_OUTPUT_CHAIN $LCOUNT -d $mon_host_ip -j RETURN
-                  if [ "$VERBOSE" = "1" ]; then
-                    printf "out_action=update "
-                  fi
-                  OLDFOUND=1
-                  ipt_out_value="$(echo "$LINE" |awk '{ print $2 }')"
-
-                  break
-                fi
-              done
-            fi
-            ;;
-          esac
-        fi
-
-        if [ $OLDFOUND -eq 0 ]; then
-          if [ "$VERBOSE" = "1" ]; then
-            printf "out_action=add "
-          fi
-
-          if [ "$mon_host_ip" = "0.0.0.0/0" -o "$mon_host_ip" = "::/0" ]; then
-            iptables -A ACCOUNTING_OUTPUT_CHAIN -d $mon_host_ip -j RETURN
-          else
-            iptables -I ACCOUNTING_OUTPUT_CHAIN 1 -d $mon_host_ip -j RETURN
-          fi
-
-          # Preset values to zero as none exist yet
-          ipt_out_value=0
-        fi
-
-        # Calculate new in value
-        new_in_value=$((old_in_value + ipt_in_value))
-
-        # Calculate new out value
-        new_out_value=$((old_out_value + ipt_out_value))
-        if [ "$VERBOSE" = "1" ]; then
-          printf "old_in_val=$old_in_value ipt_in_val=$ipt_in_value new_in_val=$new_in_value old_out_val=$old_out_value ipt_out_val=$ipt_out_value new_out_val=$new_out_value"
-        fi
-
-        # Create entry in accounting file
-        echo "$host $mon_host_ip $new_in_value $new_out_value" >>/tmp/traffic-accounting.new
-
-        if [ "$VERBOSE" = "1" ]; then
-          printf "\n\n"
-        fi
-      done
+      # Create entry in accounting file
+      echo "$host $mon_host_ip $in_value $out_value" >>/tmp/traffic-accounting.new
     done
   done
 
+  if ! nft_commit; then
+    RETVAL=1
+  fi
+
   # FIXME: Don't use old-file
-  if [ -f /var/log/traffic-accounting.log ]; then
-    if [ -f /var/log/traffic-accounting.log.old ]; then
-      rm -f /var/log/traffic-accounting.log.old
+  if [ -f "$LOG" ]; then
+    if [ -f "$LOG.old" ]; then
+      rm -f "$LOG.old"
     fi
 
-    mv /var/log/traffic-accounting.log /var/log/traffic-accounting.log.old
+    mv "$LOG" "$LOG.old"
   fi
-  mv /tmp/traffic-accounting.new /var/log/traffic-accounting.log
+  mv /tmp/traffic-accounting.new "$LOG"
 
   return $RETVAL
 }

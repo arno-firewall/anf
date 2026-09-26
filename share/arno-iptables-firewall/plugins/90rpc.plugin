@@ -30,11 +30,10 @@ PLUGIN_CONF_FILE="rpc.conf"
 plugin_start()
 {
   # Create new DYNDNS_CHAIN chain:
-  iptables -N RPC_CHAIN 2>/dev/null
-  iptables -F RPC_CHAIN
+  nft_chain RPC_CHAIN
 
   # Insert rule into the main chain:
-  iptables -A EXT_INPUT_CHAIN -j RPC_CHAIN
+  nft_rule EXT_INPUT_CHAIN "jump RPC_CHAIN"
 
   echo "${INDENT}Enabling RPC service(s) $RPC_SERVICES for net(s) $RPC_NETS"
 
@@ -44,7 +43,7 @@ plugin_start()
     echo "${INDENT}Adding TCP ports $ports for RPC service $service"
     for net in $RPC_NETS; do
       for port in $ports; do
-        iptables -I RPC_CHAIN -p tcp -s $net --dport $port -j ACCEPT
+        nft_insert RPC_CHAIN "$(nft_addr saddr $net) tcp dport $port accept"
       done
     done
 
@@ -52,7 +51,7 @@ plugin_start()
     echo "${INDENT}Adding UDP ports $ports for RPC service $service"
     for net in $RPC_NETS; do
       for port in $ports; do
-        iptables -I RPC_CHAIN -p udp -s $net --dport $port -j ACCEPT
+        nft_insert RPC_CHAIN "$(nft_addr saddr $net) udp dport $port accept"
       done
     done
   done
@@ -64,24 +63,16 @@ plugin_start()
 # Plugin restart function
 plugin_restart()
 {
-  ## Re-add standard chain rules that are flushed on a restart
+  # The whole ruleset is rebuilt on a restart, so start again
   echo "${INDENT}Restarting..."
 
-  # Insert rule into the main chain:
-  iptables -A EXT_INPUT_CHAIN -j RPC_CHAIN
-
-  return 0
+  plugin_start
 }
 
 
 # Plugin stop function
 plugin_stop()
 {
-  iptables -D EXT_INPUT_CHAIN -j RPC_CHAIN 2>/dev/null
-
-  iptables -F RPC_CHAIN
-  iptables -X RPC_CHAIN 2>/dev/null
-
   return 0
 }
 
@@ -89,7 +80,7 @@ plugin_stop()
 # Plugin status function
 plugin_status()
 {
-  iptables -L RPC_CHAIN |sed -e "s/^/$INDENT/"
+  $NFT list chain inet $NFT_TABLE RPC_CHAIN |sed -e "s/^/$INDENT/"
 
   return 0
 }

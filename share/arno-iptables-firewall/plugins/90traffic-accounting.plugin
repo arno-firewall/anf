@@ -38,16 +38,11 @@ JOB_HELPER_SCRIPT="$PLUGIN_BIN_PATH/traffic-accounting-helper"
 
 traffic_accounting_init()
 {
-  # Flush accounting chains
-  iptables -F ACCOUNTING_INPUT_CHAIN
-  iptables -F ACCOUNTING_OUTPUT_CHAIN
+  # Insert rule in the INPUT chain, the helper fills the accounting chains
+  nft_insert INPUT "jump ACCOUNTING_INPUT_CHAIN"
 
-  # (Re)insert rule in the INPUT chain
-  iptables -I INPUT 1 -j ACCOUNTING_INPUT_CHAIN
-
-  # (Re)insert rule in the OUTPUT chain
   # Insert rule in the OUTPUT chain
-  iptables -I OUTPUT 1 -j ACCOUNTING_OUTPUT_CHAIN
+  nft_insert OUTPUT "jump ACCOUNTING_OUTPUT_CHAIN"
 
   # Remove old cron job (this is in case a legacy plugin left it)
   rm -f /etc/cron.d/traffic-accounting
@@ -69,8 +64,8 @@ plugin_start()
   sysctl net.netfilter.nf_conntrack_acct=1 2>/dev/null
 
   # Create new chains
-  iptables -N ACCOUNTING_INPUT_CHAIN 2>/dev/null
-  iptables -N ACCOUNTING_OUTPUT_CHAIN 2>/dev/null
+  nft_chain ACCOUNTING_INPUT_CHAIN
+  nft_chain ACCOUNTING_OUTPUT_CHAIN
 
   # Initialize
   if ! traffic_accounting_init; then
@@ -89,12 +84,8 @@ plugin_restart()
   # Store current values (NOTE: Ignore return value)
   job_run_once "$JOB_HELPER_SCRIPT"
 
-  # Initialize
-  if ! traffic_accounting_init; then
-    return 1
-  fi
-
-  return 0
+  # The whole ruleset is rebuilt on a restart, so start again
+  plugin_start
 }
 
 
@@ -106,14 +97,6 @@ plugin_stop()
 
   # Store current values (NOTE: Ignore return value)
   job_run_once "$JOB_HELPER_SCRIPT"
-
-  iptables -D INPUT -j ACCOUNTING_INPUT_CHAIN 2>/dev/null
-  iptables -D OUTPUT -j ACCOUNTING_OUTPUT_CHAIN 2>/dev/null
-
-  iptables -F ACCOUNTING_INPUT_CHAIN
-  iptables -X ACCOUNTING_INPUT_CHAIN 2>/dev/null
-  iptables -F ACCOUNTING_OUTPUT_CHAIN
-  iptables -X ACCOUNTING_OUTPUT_CHAIN 2>/dev/null
 
   return 0
 }

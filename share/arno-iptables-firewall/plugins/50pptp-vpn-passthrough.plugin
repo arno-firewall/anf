@@ -38,10 +38,7 @@ plugin_start()
     echo "${INDENT}Enable PPTP NAT helper module"
     modprobe_multi nf_nat_pptp ip_nat_pptp
 
-    if ip4tables -nL CONNTRACK_HELPER >/dev/null 2>&1; then
-      ip4tables -A CONNTRACK_HELPER -m conntrack --ctstate RELATED -m helper --helper pptp -j ACCEPT
-      ip4tables -t raw -A PREROUTING -p tcp --dport 1723 -j CT --helper pptp
-    fi
+    load_conntrack_helper_module pptp tcp 1723
   else
     echo "${INDENT}ERROR: NAT is not enabled, this plugin will be ignored."
   fi
@@ -64,7 +61,6 @@ plugin_restart()
 # Plugin stop function
 plugin_stop()
 {
-
   if [ "$NAT" = "1" ]; then
     if [ -e /proc/modules -a -x "$MODPROBE" ]; then
       if ! $MODPROBE -r nf_nat_pptp >/dev/null 2>&1; then

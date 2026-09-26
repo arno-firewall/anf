@@ -102,7 +102,7 @@ plugin_stop()
   echo "${INDENT}Removing lookup rules"
   ip rule del from $MULTIROUTE_EXT_IP1 lookup 1
   ip rule del from $MULTIROUTE_EXT_IP2 lookup 2
-  
+
   ip route del default via $MULTIROUTE_EXT_ROUTER1 dev $MULTIROUTE_EXT_IF1 2>/dev/null
   ip route del default via $MULTIROUTE_EXT_ROUTER2 dev $MULTIROUTE_EXT_IF2 2>/dev/null
 
@@ -113,7 +113,7 @@ plugin_stop()
   # Flush route cache
 #    echo "1" >/proc/sys/net/ipv4/route/flush
   ip route flush cache
-    
+
   return 0
 }
 

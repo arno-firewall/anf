@@ -37,18 +37,16 @@ PLUGIN_CONF_FILE="linux-upnp-igd.conf"
 plugin_start()
 {
   # Create new UPNP_FORWARD chain to be used by linuxigd (aka upnpd):
-  iptables -N UPNP_FORWARD 2>/dev/null
-  iptables -F UPNP_FORWARD
-  iptables -N UPNP_FORWARD_HOOK 2>/dev/null
-  iptables -F UPNP_FORWARD_HOOK
+  nft_chain UPNP_FORWARD
+  nft_chain UPNP_FORWARD_HOOK
 
   # Insert rule into the FORWARD chain:
   IFS=' ,'
   for eif in $EXT_IF; do
-    iptables -A UPNP_FORWARD_HOOK -i $eif ! -o $eif -j UPNP_FORWARD
+    nft_rule UPNP_FORWARD_HOOK "$(nft_if iifname $eif) $(nft_if oifname $eif !=) jump UPNP_FORWARD"
   done
 
-  iptables -A FORWARD -j UPNP_FORWARD_HOOK
+  nft_rule FORWARD "jump UPNP_FORWARD_HOOK"
   
   return 0
 }
@@ -57,14 +55,6 @@ plugin_start()
 # Plugin stop function
 plugin_stop()
 {
-  iptables -D FORWARD -j UPNP_FORWARD_HOOK 2>/dev/null
-  
-  iptables -F UPNP_FORWARD_HOOK
-  iptables -X UPNP_FORWARD_HOOK 2>/dev/null
-
-  iptables -F UPNP_FORWARD
-  iptables -X UPNP_FORWARD 2>/dev/null
-
   return 0
 }
 

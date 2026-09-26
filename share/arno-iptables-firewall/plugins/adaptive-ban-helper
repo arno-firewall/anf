@@ -160,20 +160,15 @@ ban_host()
   get_numeric_ip_version "$host"
   case $? in
   4)
-    if ! ip4tables -n -L ADAPTIVE_BAN_CHAIN | grep -q " ${host//./\.}[/ ]"; then
-      ip4tables -A ADAPTIVE_BAN_CHAIN -s $host -j ADAPTIVE_BAN_DROP_CHAIN
-      if [ $? -eq 0 ]; then
-        echo "Banned IPv4 host: $host  Filter type: $type" >&2
-      fi
+    # "create" fails for hosts that are already banned
+    if $NFT create element inet $NFT_TABLE aif_adaptive_ban "{ $host }" 2>/dev/null; then
+      echo "Banned IPv4 host: $host  Filter type: $type" >&2
     fi
     ;;
   6)
     if [ "$IPV6_SUPPORT" = "1" ]; then
-      if ! ip6tables -n -L ADAPTIVE_BAN_CHAIN | grep -q " ${host}[/ ]"; then
-        ip6tables -A ADAPTIVE_BAN_CHAIN -s $host -j ADAPTIVE_BAN_DROP_CHAIN
-        if [ $? -eq 0 ]; then
-          echo "Banned IPv6 host: $host  Filter type: $type" >&2
-        fi
+      if $NFT create element inet $NFT_TABLE aif_adaptive_banv6 "{ $host }" 2>/dev/null; then
+        echo "Banned IPv6 host: $host  Filter type: $type" >&2
       fi
     fi
     ;;
@@ -182,17 +177,7 @@ ban_host()
 
 check_for_chain()
 {
-  local err
-
-  ip4tables -n -L "$1" >/dev/null 2>&1
-  err=$?
-
-  if [ "$IPV6_SUPPORT" = "1" -a $err -eq 0 ]; then
-    ip6tables -n -L "$1" >/dev/null 2>&1
-    err=$?
-  fi
-
-  return $err
+  $NFT list chain inet $NFT_TABLE "$1" >/dev/null 2>&1
 }
 
 ############

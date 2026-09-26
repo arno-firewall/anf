@@ -38,7 +38,6 @@ plugin_start()
 {
   # Some required modules are already loaded by the main script:
   modprobe_multi nf_nat ip_nat
-  modprobe iptable_nat
 
   echo "${INDENT}Using internal IP $DNAT_MY_INTERNAL_IP & external IP $DNAT_MY_EXTERNAL_IP"
   if [ -n "$DNAT_TCP_PORTS" ]; then
@@ -46,9 +45,9 @@ plugin_start()
     IFS=' ,'
     for interface in $INT_IF; do
       for port in $DNAT_TCP_PORTS; do
-        ip4tables -t nat -A POSTROUTING -o $interface -p tcp --dport $port -d $DNAT_MY_INTERNAL_IP -j MASQUERADE
+        nft_rule POSTROUTING "meta nfproto ipv4 $(nft_if oifname $interface) $(nft_addr daddr $DNAT_MY_INTERNAL_IP) tcp dport $port masquerade"
         
-        ip4tables -t nat -A PREROUTING -i $interface -d $DNAT_MY_EXTERNAL_IP -p tcp --dport $port -j DNAT --to-destination $DNAT_MY_INTERNAL_IP
+        nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $interface) $(nft_addr daddr $DNAT_MY_EXTERNAL_IP) tcp dport $port dnat ip to $DNAT_MY_INTERNAL_IP"
       done
     done
   else
@@ -60,9 +59,9 @@ plugin_start()
     IFS=' ,'
     for interface in $INT_IF; do
       for port in $DNAT_UDP_PORTS; do
-        ip4tables -t nat -A POSTROUTING -o $interface -p udp --dport $port -d $DNAT_MY_INTERNAL_IP -j MASQUERADE
+        nft_rule POSTROUTING "meta nfproto ipv4 $(nft_if oifname $interface) $(nft_addr daddr $DNAT_MY_INTERNAL_IP) udp dport $port masquerade"
 
-        ip4tables -t nat -A PREROUTING -i $interface -d $DNAT_MY_EXTERNAL_IP -p udp --dport $port -j DNAT --to-destination $DNAT_MY_INTERNAL_IP
+        nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $interface) $(nft_addr daddr $DNAT_MY_EXTERNAL_IP) udp dport $port dnat ip to $DNAT_MY_INTERNAL_IP"
       done
     done
   else

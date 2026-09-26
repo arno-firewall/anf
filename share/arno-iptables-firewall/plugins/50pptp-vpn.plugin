@@ -34,14 +34,11 @@ plugin_start()
 {
   local host net eif ppp_ifs="" IFS
 
-  iptables -N PPTP_VPN_INPUT 2>/dev/null
-  iptables -F PPTP_VPN_INPUT
+  nft_chain PPTP_VPN_INPUT
 
-  iptables -N PPTP_VPN_FORWARD_IN 2>/dev/null
-  iptables -F PPTP_VPN_FORWARD_IN
+  nft_chain PPTP_VPN_FORWARD_IN
 
-  iptables -N PPTP_VPN_FORWARD_OUT 2>/dev/null
-  iptables -F PPTP_VPN_FORWARD_OUT
+  nft_chain PPTP_VPN_FORWARD_OUT
 
   IFS=' ,'
   for eif in $EXT_IF; do
@@ -62,18 +59,18 @@ plugin_start()
     echo "${INDENT}Excluding external interfaces '$ppp_ifs' from PPTP VPN"
     IFS=' ,'
     for eif in $ppp_ifs; do
-      iptables -A PPTP_VPN_INPUT -i $eif -j RETURN
-      iptables -A PPTP_VPN_FORWARD_IN -i $eif -j RETURN
-      iptables -A PPTP_VPN_FORWARD_OUT -o $eif -j RETURN
+      nft_rule PPTP_VPN_INPUT "$(nft_if iifname $eif) return"
+      nft_rule PPTP_VPN_FORWARD_IN "$(nft_if iifname $eif) return"
+      nft_rule PPTP_VPN_FORWARD_OUT "$(nft_if oifname $eif) return"
     done
   fi
   if [ -n "$PPTP_VPN_ALLOW_HOSTS" ]; then
     echo "${INDENT}Allowing PPTP VPN packets to hosts: $PPTP_VPN_ALLOW_HOSTS"
     IFS=' ,'
     for host in $PPTP_VPN_ALLOW_HOSTS; do
-      iptables -A PPTP_VPN_INPUT -d $host -j ACCEPT
-      iptables -A PPTP_VPN_FORWARD_IN -d $host -j ACCEPT
-      iptables -A PPTP_VPN_FORWARD_OUT -s $host -j ACCEPT
+      nft_rule PPTP_VPN_INPUT "$(nft_addr daddr $host) accept"
+      nft_rule PPTP_VPN_FORWARD_IN "$(nft_addr daddr $host) accept"
+      nft_rule PPTP_VPN_FORWARD_OUT "$(nft_addr saddr $host) accept"
     done
   fi
   if [ -n "$PPTP_VPN_DENY_HOSTS" ]; then
@@ -81,22 +78,19 @@ plugin_start()
     IFS=' ,'
     for host in $PPTP_VPN_DENY_HOSTS; do
       if [ "$PPTP_VPN_DENY_LOG" = "1" ]; then
-        iptables -A PPTP_VPN_INPUT -d $host -m limit --limit 3/m -j LOG \
-                 --log-level $LOGLEVEL --log-prefix "AIF:PPTP-VPN denied: "
-        iptables -A PPTP_VPN_FORWARD_IN -d $host -m limit --limit 3/m -j LOG \
-                 --log-level $LOGLEVEL --log-prefix "AIF:PPTP-VPN denied: "
-        iptables -A PPTP_VPN_FORWARD_OUT -s $host -m limit --limit 3/m -j LOG \
-                 --log-level $LOGLEVEL --log-prefix "AIF:PPTP-VPN denied: "
+        nft_rule PPTP_VPN_INPUT "$(nft_addr daddr $host) limit rate 3/minute burst 5 packets log prefix \"AIF:PPTP-VPN denied: \" level $LOGLEVEL"
+        nft_rule PPTP_VPN_FORWARD_IN "$(nft_addr daddr $host) limit rate 3/minute burst 5 packets log prefix \"AIF:PPTP-VPN denied: \" level $LOGLEVEL"
+        nft_rule PPTP_VPN_FORWARD_OUT "$(nft_addr saddr $host) limit rate 3/minute burst 5 packets log prefix \"AIF:PPTP-VPN denied: \" level $LOGLEVEL"
       fi
-      iptables -A PPTP_VPN_INPUT -d $host -j DROP
-      iptables -A PPTP_VPN_FORWARD_IN -d $host -j DROP
-      iptables -A PPTP_VPN_FORWARD_OUT -s $host -j DROP
+      nft_rule PPTP_VPN_INPUT "$(nft_addr daddr $host) drop"
+      nft_rule PPTP_VPN_FORWARD_IN "$(nft_addr daddr $host) drop"
+      nft_rule PPTP_VPN_FORWARD_OUT "$(nft_addr saddr $host) drop"
     done
   fi
   # Default policy, allow all the rest
-  iptables -A PPTP_VPN_INPUT -j ACCEPT
-  iptables -A PPTP_VPN_FORWARD_IN -j ACCEPT
-  iptables -A PPTP_VPN_FORWARD_OUT -j ACCEPT
+  nft_rule PPTP_VPN_INPUT "accept"
+  nft_rule PPTP_VPN_FORWARD_IN "accept"
+  nft_rule PPTP_VPN_FORWARD_OUT "accept"
 
   # Filter ppp+ traffic related to the PPTP VPN
   if [ -n "$PPTP_VPN_NETS" ]; then
@@ -104,22 +98,22 @@ plugin_start()
     IFS=' ,'
     for net in $PPTP_VPN_NETS; do
       # Adjust spoof check
-      iptables -I SPOOF_CHK -i ppp+ -s $net -j RETURN
+      nft_insert SPOOF_CHK "iifname \"ppp*\" $(nft_addr saddr $net) return"
       
       # Insert rule in the INPUT chain
-      iptables -A INPUT -i ppp+ -s $net -j PPTP_VPN_INPUT
+      nft_rule INPUT "iifname \"ppp*\" $(nft_addr saddr $net) jump PPTP_VPN_INPUT"
       
       # Insert rules in the FORWARD chain
-      iptables -A FORWARD -i ppp+ -s $net -j PPTP_VPN_FORWARD_IN
-      iptables -A FORWARD -o ppp+ -d $net -j PPTP_VPN_FORWARD_OUT
+      nft_rule FORWARD "iifname \"ppp*\" $(nft_addr saddr $net) jump PPTP_VPN_FORWARD_IN"
+      nft_rule FORWARD "oifname \"ppp*\" $(nft_addr daddr $net) jump PPTP_VPN_FORWARD_OUT"
     done
   fi
 
   echo "${INDENT}Allowing internet hosts $PPTP_VPN_TUNNEL_HOSTS to access the PPTP VPN service"
   IFS=' ,'
-  for host in $(ip_range "$PPTP_VPN_TUNNEL_HOSTS"); do
-    iptables -A EXT_INPUT_CHAIN -p gre -s $host -j ACCEPT
-    iptables -A EXT_INPUT_CHAIN -p tcp --dport 1723 -s $host -j ACCEPT
+  for host in $(nft_hosts "$PPTP_VPN_TUNNEL_HOSTS"); do
+    nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto gre accept"
+    nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport 1723 accept"
   done
   
   return 0
@@ -140,16 +134,6 @@ plugin_restart()
 # Plugin stop function
 plugin_stop()
 {
-
-  iptables -F PPTP_VPN_INPUT
-  iptables -X PPTP_VPN_INPUT 2>/dev/null
-
-  iptables -F PPTP_VPN_FORWARD_IN
-  iptables -X PPTP_VPN_FORWARD_IN 2>/dev/null
-
-  iptables -F PPTP_VPN_FORWARD_OUT
-  iptables -X PPTP_VPN_FORWARD_OUT 2>/dev/null
-
   return 0
 }
 
