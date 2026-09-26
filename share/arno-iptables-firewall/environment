@@ -168,6 +168,7 @@ kernel_ver_chk()
 # nf_conntrack helper assignment
 # Example: load_conntrack_helper_module ftp tcp 21
 ##
+# Usage: load_conntrack_helper_module HELPER PROTO PORTS
 load_conntrack_helper_module()
 {
   local helper="$1" proto="$2" dport="$3" l3proto="inet"
@@ -183,7 +184,7 @@ load_conntrack_helper_module()
 
   # Helpers are always assigned explicitly (automatic assignment is gone since kernel 6.0)
   nft_cmd "add ct helper inet $NFT_TABLE $helper-helper { type \"$helper\" protocol $proto; l3proto $l3proto; }"
-  nft_rule HELPER_PREROUTING "$proto dport $(echo "$dport" |nft_ports) ct helper set \"$helper-helper\""
+  nft_rule HELPER_PREROUTING "$proto dport { $(echo "$dport" |nft_ports |sed -r -e 's/[ ,]+/, /g') } ct helper set \"$helper-helper\""
 
   if [ "$helper" = "ftp" ]; then
     nft_rule CONNTRACK_HELPER "ct state related ct helper \"$helper\" $proto dport 1024-65535 accept"
@@ -196,21 +197,6 @@ load_conntrack_helper_module()
 lc()
 {
   wc -l |awk '{ print $1 }'
-}
-
-
-note_iptables_error()
-{
-  local arg IFS
-
-  IFS='~'  # expand command-line args using the unique 'tilde' character
-  for arg in $*; do
-    if [ "$arg" = "-A" -o "$arg" = "-I" ]; then
-      return 0
-    fi
-  done
-
-  return 1
 }
 
 
@@ -285,7 +271,17 @@ nft_rule()
     *" ip "[sd]"addr "*" icmpv6 type "*|*" ip6 "[sd]"addr "*" icmp type "*) return 0 ;;
   esac
 
-  printf 'add rule inet %s %s %s\n' "$NFT_TABLE" "$chain" "$rule" >>"$NFT_BATCH"
+  printf '%s rule inet %s %s %s\n' "${NFT_OP:-add}" "$NFT_TABLE" "$chain" "$rule" >>"$NFT_BATCH"
+}
+
+
+# Usage: nft_insert CHAIN rule...
+# Like nft_rule, but inserts the rule at the top of the chain
+nft_insert()
+{
+  local NFT_OP="insert"
+
+  nft_rule "$@"
 }
 
 
@@ -343,6 +339,19 @@ nft_hosts()
 }
 
 
+# Usage: nft_rate HITS SECONDS
+# Prints a per-element limit that is exceeded at more than HITS within SECONDS,
+# the nft counterpart of "-m recent --seconds SECONDS --hitcount HITS"
+nft_rate()
+{
+  if [ $(( $1 * 3600 )) -ge $2 ]; then
+    echo "limit rate over $(( ($1 * 3600 + $2 - 1) / $2 ))/hour burst $1 packets"
+  else
+    echo "limit rate over $(( ($1 * 86400 + $2 - 1) / $2 ))/day burst $1 packets"
+  fi
+}
+
+
 # Usage: nft_ports PORTS
 # Converts iptables style port ranges (a:b, :b, a:) to nft (a-b)
 nft_ports()
@@ -367,7 +376,7 @@ nft_commit()
     printf "\033[40m\033[1;31m%s\n\033[0m" "$err_result" >&2
     for line in $bad_lines; do
       # Only individual rules/elements may be skipped, a broken chain or set definition is fatal
-      if ! sed -n "${line}p" "$NFT_BATCH" |grep -q -e '^add rule ' -e '^add element '; then
+      if ! sed -n "${line}p" "$NFT_BATCH" |grep -q -e '^add rule ' -e '^insert rule ' -e '^add element '; then
         bad_lines=""
         break
       fi
@@ -390,274 +399,6 @@ nft_commit()
   fi
 
   return $retval
-}
-
-
-ip6tables_icmp_args()
-{
-  local arg args="" action="" tilde="~" IFS
-
-  IFS='~'  # expand command-line args using the unique 'tilde' character
-  for arg in $*; do
-    if [ "$action" = "p" ]; then
-      if [ "$arg" = "icmp" ]; then
-        arg="icmpv6"
-      fi
-      action=""
-    else
-      # parse option flags
-      case $arg in
-      --icmp-type)
-        arg="--icmpv6-type"
-        ;;
-      -p|--proto)
-        action="p"
-        ;;
-      esac
-    fi
-    # build 'tilde' separated command-line
-    # Note: use $tilde instead of ~ to workaround Busybox 'ash' bug
-    args="$args${args:+$tilde}$arg"
-  done
-  
-  # return 'tilde' separated command-line
-  echo "$args"
-}
-
-
-iptables()
-{
-  local arg action="" IFS
-  local src=0 dst=0 table="" proto=""
-
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    IFS='~'  # expand command-line args using the unique 'tilde' character
-    for arg in $*; do
-      if [ -n "$action" ]; then
-        case $action in
-        s)
-          get_numeric_ip_version "$arg"
-          src=$?
-          ;;
-        d)
-          get_numeric_ip_version "$arg"
-          dst=$?
-          ;;
-        t)
-          table="$arg"
-          ;;
-        p)
-          proto="$arg"
-          ;;
-        esac
-        action=""
-      else
-        # parse option flags
-        case $arg in
-        -s|--source)
-          action="s"
-          ;;
-        -d|--destination)
-          action="d"
-          ;;
-        -t|--table)
-          action="t"
-          ;;
-        -p|--proto)
-          action="p"
-          ;;
-        esac
-      fi
-    done
-    unset IFS
-
-    #
-    # Call ip4tables and/or ip6tables as appropriate
-    #
-    if [ $src -eq 4 -o $dst -eq 4 -o "$table" = "nat" ]; then
-      ip4tables "$@"
-    elif [ $src -eq 6 -o $dst -eq 6 -o "$proto" = "icmpv6" ]; then
-      if [ "$proto" = "icmp" ]; then
-        IFS='~'; set -- $(ip6tables_icmp_args "$@"); unset IFS
-      fi
-      ip6tables "$@"
-    elif [ "$proto" = "icmp" ]; then
-      ip4tables "$@"
-      # Regenerate ip6tables command-line from the returned 'tilde' separated string
-      IFS='~'; set -- $(ip6tables_icmp_args "$@"); unset IFS
-      ip6tables "$@"
-    else
-      ip4tables "$@"
-      ip6tables "$@"
-    fi
-  else
-    #
-    # Only call ip4tables since IPv6 filtering is disabled.
-    #
-    ip4tables "$@"
-  fi
-}
-
-
-ip4tables()
-{
-  local err_result retval IFS=' '
-
-  # Create extra FD
-  exec 3>&1
-
-  err_result=`$IP4TABLES${IPTABLES_OPTIONS:+ $IPTABLES_OPTIONS} "$@" 2>&1 1>&3`
-  retval=$?
-
-  # Release extra FD
-  exec 3>&-
-
-  if [ $retval -ne 0 ]; then
-    # Show any (error) messages in red
-    printf "\033[40m\033[1;31m${IP4TABLES} $*\nERROR ($retval): ${err_result}\n\033[0m" >&2
-
-    if note_iptables_error "$@"; then
-      RULE_WARNING=$((RULE_WARNING + 1))
-    fi
-  elif [ -n "$err_result" ]; then
-    # ip4tables returned success, so normal output of stderr but filter some messages
-    echo "$err_result" |grep -v -e 'WARNING:.*match is obsolete' -e 'iptables-legacy tables present' >&2
-  fi
-
-  return $retval
-}
-
-
-ip6tables()
-{
-  local err_result retval IFS=' '
-
-  # Create extra FD
-  exec 3>&1
-
-  err_result=`$IP6TABLES${IPTABLES_OPTIONS:+ $IPTABLES_OPTIONS} "$@" 2>&1 1>&3`
-  retval=$?
-
-  # Release extra FD
-  exec 3>&-
-
-  if [ $retval -ne 0 ]; then
-    # Show any (error) messages in red
-    printf "\033[40m\033[1;31m${IP6TABLES} $*\nERROR ($retval): ${err_result}\n\033[0m" >&2
-
-    if note_iptables_error "$@"; then
-      RULE_WARNING=$((RULE_WARNING + 1))
-    fi
-  elif [ -n "$err_result" ]; then
-    # ip6tables returned success, so normal output of stderr but filter some messages
-    echo "$err_result" |grep -v -e 'WARNING:.*match is obsolete' -e 'iptables-legacy tables present' >&2
-  fi
-
-  return $retval
-}
-
-
-ip4tables_save()
-{
-  local retval IFS=' '
-
-  $IP4TABLES_SAVE "$@"
-  retval=$?
-
-  if [ $retval -ne 0 ]; then
-    # Show any (error) messages in red
-    printf "\033[40m\033[1;31m${IP4TABLES_SAVE} $*\nERROR ($retval)\033[0m\n" >&2
-    RULE_WARNING=$((RULE_WARNING + 1))
-  fi
-
-  return $retval
-}
-
-
-ip4tables_restore()
-{
-  local err_result retval IFS=' '
-
-  # Create extra FD
-  exec 3>&1
-
-  err_result=`$IP4TABLES_RESTORE "$@" 2>&1 1>&3`
-  retval=$?
-
-  # Release extra FD
-  exec 3>&-
-
-  if [ $retval -ne 0 ]; then
-    # Show any (error) messages in red
-    printf "\033[40m\033[1;31m${IP4TABLES_RESTORE} $*\nERROR ($retval): ${err_result}\n\033[0m" >&2
-
-    RULE_WARNING=$((RULE_WARNING + 1))
-  elif [ -n "$err_result" ]; then
-    # ip4tables_restore returned success, so normal output of stderr but filter some messages
-    echo "$err_result" |grep -v -e 'WARNING:.*match is obsolete' -e 'iptables-legacy tables present' >&2
-  fi
-
-  return $retval
-}
-
-
-ip6tables_save()
-{
-  local retval IFS=' '
-
-  $IP6TABLES_SAVE "$@"
-  retval=$?
-
-  if [ $retval -ne 0 ]; then
-    # Show any (error) messages in red
-    printf "\033[40m\033[1;31m${IP6TABLES_SAVE} $*\nERROR ($retval)\033[0m\n" >&2
-    RULE_WARNING=$((RULE_WARNING + 1))
-  fi
-
-  return $retval
-}
-
-
-ip6tables_restore()
-{
-  local err_result retval IFS=' '
-
-  # Create extra FD
-  exec 3>&1
-
-  err_result=`$IP6TABLES_RESTORE "$@" 2>&1 1>&3`
-  retval=$?
-
-  # Release extra FD
-  exec 3>&-
-
-  if [ $retval -ne 0 ]; then
-    # Show any (error) messages in red
-    printf "\033[40m\033[1;31m${IP6TABLES_RESTORE} $*\nERROR ($retval): ${err_result}\n\033[0m" >&2
-
-    RULE_WARNING=$((RULE_WARNING + 1))
-  elif [ -n "$err_result" ]; then
-    # ip6tables_restore returned success, so normal output of stderr but filter some messages
-    echo "$err_result" |grep -v -e 'WARNING:.*match is obsolete' -e 'iptables-legacy tables present' >&2
-  fi
-
-  return $retval
-}
-
-
-try_ip4tables()
-{
-  local IFS=' '
-
-  $IP4TABLES${IPTABLES_OPTIONS:+ $IPTABLES_OPTIONS} "$@" >/dev/null 2>&1
-}
-
-
-try_ip6tables()
-{
-  local IFS=' '
-
-  $IP6TABLES${IPTABLES_OPTIONS:+ $IPTABLES_OPTIONS} "$@" >/dev/null 2>&1
 }
 
 
@@ -1272,15 +1013,6 @@ parse_rule_warning()
   RULE_WARNING=$((RULE_WARNING + 1))
 
   echo "** WARNING: In variable $var, Rule: \"$rule\" is ignored." >&2
-}
-
-
-# Helper function to work around non working + wildcard in some versions of iptables
-ipt_if()
-{
-  if [ -n "$2" -a "$2" != "+" ]; then
-    echo "$1${IFS:- }$2"
-  fi
 }
 
 
@@ -1942,129 +1674,6 @@ ip_range()
 }
 
 
-iptables_batch()
-{
-  local IFS=' '
-  # Note: this wrapper does not perform IPv4/IPv6 address type checking
-  # That must be done elsewhere for speed reasons
-  #
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    ip4tables_batch "$@"
-    ip6tables_batch "$@"
-  else
-    ip4tables_batch "$@"
-  fi
-}
-
-
-# Add iptables rules in batch using iptables-save and iptables-restore
-ip4tables_batch()
-{
-  local ARGS CHAIN CHAINFILE RESULT=0 IFS=' '
-  
-  # Args must be of the form and called in this order:
-  #   start
-  #   init CHAIN
-  #   -A CHAIN ...
-  #   apply CHAIN
-  #   stop
-  #
-  # Note: the added rules will be placed after a required
-  #       pre-existing rule in CHAIN.
-  #
-  ARGS="$@"
-  CHAIN="$2"
-
-  if [ "$DISABLE_IPTABLES_BATCH" = "1" ]; then
-    if [ "$1" = "-A" ]; then
-      ip4tables "$@"
-    fi
-    return
-  fi
-
-  if [ -n "$CHAIN" ]; then
-    CHAINFILE="$IP4TABLES_BATCH_FILE"_"$CHAIN"
-    if [ "$1" = "-A" ]; then
-      echo "$ARGS" >> "$CHAINFILE"
-    elif [ "$1" = "init" ]; then
-      rm -f "$CHAINFILE"
-    elif [ "$1" = "apply" ]; then
-      sed -i "/^-A $CHAIN / r $CHAINFILE" "$IP4TABLES_BATCH_FILE"
-      ip4tables_restore < "$IP4TABLES_BATCH_FILE"
-      RESULT=$?
-      rm -f "$CHAINFILE"
-    else
-      RESULT=1
-    fi
-  else
-    if [ "$1" = "start" ]; then
-      ip4tables_save -t filter > "$IP4TABLES_BATCH_FILE"
-      RESULT=$?
-    elif [ "$1" = "stop" ]; then
-      rm -f "$IP4TABLES_BATCH_FILE"
-    else
-      RESULT=1
-    fi
-  fi
-
-  return $RESULT
-}
-
-
-# Add ip6tables rules in batch using ip6tables-save and ip6tables-restore
-ip6tables_batch()
-{
-  local ARGS CHAIN CHAINFILE RESULT=0 IFS=' '
-
-  # Args must be of the form and called in this order:
-  #   start
-  #   init CHAIN
-  #   -A CHAIN ...
-  #   apply CHAIN
-  #   stop
-  #
-  # Note: the added rules will be placed after a required
-  #       pre-existing rule in CHAIN.
-  #
-  ARGS="$@"
-  CHAIN="$2"
-
-  if [ "$DISABLE_IPTABLES_BATCH" = "1" ]; then
-    if [ "$1" = "-A" ]; then
-      ip6tables "$@"
-    fi
-    return
-  fi
-
-  if [ -n "$CHAIN" ]; then
-    CHAINFILE="$IP6TABLES_BATCH_FILE"_"$CHAIN"
-    if [ "$1" = "-A" ]; then
-      echo "$ARGS" >> "$CHAINFILE"
-    elif [ "$1" = "init" ]; then
-      rm -f "$CHAINFILE"
-    elif [ "$1" = "apply" ]; then
-      sed -i "/^-A $CHAIN / r $CHAINFILE" "$IP6TABLES_BATCH_FILE"
-      ip6tables_restore < "$IP6TABLES_BATCH_FILE"
-      RESULT=$?
-      rm -f "$CHAINFILE"
-    else
-      RESULT=1
-    fi
-  else
-    if [ "$1" = "start" ]; then
-      ip6tables_save -t filter > "$IP6TABLES_BATCH_FILE"
-      RESULT=$?
-    elif [ "$1" = "stop" ]; then
-      rm -f "$IP6TABLES_BATCH_FILE"
-    else
-      RESULT=1
-    fi
-  fi
-
-  return $RESULT
-}
-
-
 # Log message function. Message is read from stdin
 # $1 = Optional prefix
 log_msg()
@@ -2198,10 +1807,6 @@ get_network_ipv6_mask()
 
 ################################# Main ####################################
 
-# Set base file for iptables_batch
-IP4TABLES_BATCH_FILE="/var/tmp/aif_ip4tables_batch"
-IP6TABLES_BATCH_FILE="/var/tmp/aif_ip6tables_batch"
-
 # Set file to store which plugins are loaded
 PLUGIN_LOAD_FILE="/var/tmp/aif_active_plugins"
 PLUGIN_LOAD_FILE_RESTART="/var/tmp/aif_active_plugins_restart"
@@ -2233,26 +1838,22 @@ if [ -z "$LOGLEVEL" ]; then
   LOGLEVEL="info"
 fi
 
+# nft only knows syslog level names, map the numeric and iptables style ones
+case $LOGLEVEL in
+  0|panic)   LOGLEVEL="emerg" ;;
+  1)         LOGLEVEL="alert" ;;
+  2)         LOGLEVEL="crit" ;;
+  3|error)   LOGLEVEL="err" ;;
+  4|warning) LOGLEVEL="warn" ;;
+  5)         LOGLEVEL="notice" ;;
+  6)         LOGLEVEL="info" ;;
+  7)         LOGLEVEL="debug" ;;
+esac
+
 # Detect all binaries
 #####################
-if [ -z "$IP6TABLES" ]; then
-  IP6TABLES="$(find_command /sbin/ip6tables /usr/sbin/ip6tables)"
-fi
-if [ -n "$IP6TABLES" ]; then
-  IP6TABLES_SAVE="$(find_command "$IP6TABLES"-save)"
-  IP6TABLES_RESTORE="$(find_command "$IP6TABLES"-restore)"
-fi
-
-if [ -z "$IP4TABLES" ]; then
-  IP4TABLES="$(find_command /sbin/iptables /usr/sbin/iptables)"
-fi
-
 if [ -z "$NFT" ]; then
   NFT="$(find_command /sbin/nft /usr/sbin/nft)"
-fi
-if [ -n "$IP4TABLES" ]; then
-  IP4TABLES_SAVE="$(find_command "$IP4TABLES"-save)"
-  IP4TABLES_RESTORE="$(find_command "$IP4TABLES"-restore)"
 fi
 
 IP="$(find_command /sbin/ip)"
@@ -2267,13 +1868,6 @@ DIG="$(find_command /usr/bin/dig)"
 
 if [ -z "$DIG" ]; then
   NSLOOKUP="$(find_command /usr/bin/nslookup)"
-fi
-
-# Enable xtables lock "wait" option found in iptables 1.4.20+
-if $IP4TABLES -w --version >/dev/null 2>&1; then
-  IPTABLES_OPTIONS="-w"
-else
-  IPTABLES_OPTIONS=""
 fi
 
 # Setup IPv6 detected environment variable

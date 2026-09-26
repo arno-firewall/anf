@@ -119,19 +119,6 @@ config_check()
 {
   local retval=0
 
-  # nft only knows syslog level names, map the numeric and iptables style ones
-  ###########################################################################
-  case $LOGLEVEL in
-    0|panic)   LOGLEVEL="emerg" ;;
-    1)         LOGLEVEL="alert" ;;
-    2)         LOGLEVEL="crit" ;;
-    3|error)   LOGLEVEL="err" ;;
-    4|warning) LOGLEVEL="warn" ;;
-    5)         LOGLEVEL="notice" ;;
-    6)         LOGLEVEL="info" ;;
-    7)         LOGLEVEL="debug" ;;
-  esac
-
   # Make sure EXT_IF != ""
   ########################
   if [ -z "$EXT_IF" ]; then
@@ -634,6 +621,7 @@ init_firewall_chains()
   nft_chain MANGLE_PREROUTING "type filter hook prerouting priority mangle; policy accept;"
   nft_chain MANGLE_FORWARD "type filter hook forward priority mangle; policy accept;"
   nft_chain MANGLE_OUTPUT "type route hook output priority mangle; policy accept;"
+  nft_chain MANGLE_POSTROUTING "type filter hook postrouting priority mangle; policy accept;"
   nft_chain HELPER_PREROUTING "type filter hook prerouting priority filter; policy accept;"
 
   # IPv4 mode: drop all IPv6 except loopback, before anything else sees it
@@ -3212,7 +3200,7 @@ setup_ext_input_chain()
   #####################################################
   if [ "$NAT_LOCAL_REDIRECT" = "1" ]; then
     echo " Enabling support for NAT local redirect"
-    nft_rule EXT_INPUT_CHAIN "meta nfproto ipv4 ct state dnat accept"
+    nft_rule EXT_INPUT_CHAIN "meta nfproto ipv4 ct status dnat accept"
   fi
 
   # Log packets to privileged TCP ports?
