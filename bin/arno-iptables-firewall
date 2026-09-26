@@ -64,20 +64,26 @@ fi
 
 sanity_check()
 {
-  local ip4t_ver ip6t_ver
+  local nft_ver
 
-  # Show uname & iptables information
+  # Show uname & nftables information
   echo "Platform: $(uname -s -r -m)"
-  ip4t_ver="$($IP4TABLES --version)"
-  ip4t_ver="${ip4t_ver#* v}"
-  ip4t_ver="${ip4t_ver%% *}"
-  ip6t_ver="$($IP6TABLES --version)"
-  ip6t_ver="${ip6t_ver#* v}"
-  ip6t_ver="${ip6t_ver%% *}"
-  echo "Netfilter iptables version: $ip4t_ver"
-  if [ "$ip4t_ver" != "$ip6t_ver" ]; then
-    printf "\033[40m\033[1;31mWARNING: Mismatched iptables($ip4t_ver) / ip6tables($ip6t_ver) versions.\033[0m\n" >&2
+  nft_ver="$($NFT --version)"
+  nft_ver="${nft_ver#nftables v}"
+  nft_ver="${nft_ver%% *}"
+  echo "Netfilter nftables version: $nft_ver"
+
+  # NAT in an inet table requires kernel 5.2+ and nftables 0.9.1+
+  if ! kernel_ver_chk 5 2 0; then
+    printf "\033[40m\033[1;31mERROR: Kernel 5.2 or newer is required! Quitting...\033[0m\n" >&2
+    exit 1
   fi
+  case $nft_ver in
+    0.[0-8]|0.[0-8].*|0.9|0.9.0|0.9.0.*)
+      printf "\033[40m\033[1;31mERROR: nftables 0.9.1 or newer is required! Quitting...\033[0m\n" >&2
+      exit 1
+      ;;
+  esac
 
   # root check
   if [ "$(id -u)" != "0" ]; then
@@ -87,10 +93,7 @@ sanity_check()
 
   # Check whether the required binaries exist and are executable
   ##############################################################
-  check_command_error iptables
-  if [ "$IPV6_DETECTED" = "1" ]; then
-    check_command_error ip6tables
-  fi
+  check_command_error nft
   check_command_error awk
   check_command_error tr
   check_command_error ip
@@ -109,50 +112,25 @@ sanity_check()
   check_command_warning pgrep
   check_command_warning pkill
   check_command_warning dig nslookup
-
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    if ! kernel_ver_chk 2 6 24; then
-      printf "\033[40m\033[1;31mWARNING: IPv6 support is enabled but your kernel is rather old (<2.6.24)! This *could* cause problems...\033[0m\n" >&2
-    fi
-  fi
-}
-
-
-ipset_check()
-{
-  if [ "$IPTABLES_IPSET" != "1" ]; then
-    if [ -n "$BLOCK_NETSET_DIR" ]; then
-      printf "\033[40m\033[1;31mWARNING: Blocking using .netset files in BLOCK_NETSET_DIR requires IPTABLES_IPSET to be enabled.\033[0m\n"
-    fi
-
-    return 1
-  fi
-
-  ## Check if userspace 'ipset' command is installed
-  if ! check_command ipset; then
-    if [ -n "$BLOCK_NETSET_DIR" ]; then
-      printf "\033[40m\033[1;31mWARNING: Blocking using .netset files in BLOCK_NETSET_DIR requires ipset-binary to be installed.\033[0m\n"
-    fi
-
-    return 1
-  fi
-
-  ## Issue a simple command that will fail without kernel support
-  if ! ipset list -n >/dev/null 2>&1; then
-    if [ -n "$BLOCK_NETSET_DIR" ]; then
-      printf "\033[40m\033[1;31mWARNING: Blocking using .netset files in BLOCK_NETSET_DIR requires ipset kernel-support to be enabled.\033[0m\n"
-    fi
-
-    return 1
-  fi
-
-  return 0
 }
 
 
 config_check()
 {
   local retval=0
+
+  # nft only knows syslog level names, map the numeric and iptables style ones
+  ###########################################################################
+  case $LOGLEVEL in
+    0|panic)   LOGLEVEL="emerg" ;;
+    1)         LOGLEVEL="alert" ;;
+    2)         LOGLEVEL="crit" ;;
+    3|error)   LOGLEVEL="err" ;;
+    4|warning) LOGLEVEL="warn" ;;
+    5)         LOGLEVEL="notice" ;;
+    6)         LOGLEVEL="info" ;;
+    7)         LOGLEVEL="debug" ;;
+  esac
 
   # Make sure EXT_IF != ""
   ########################
@@ -295,130 +273,15 @@ config_check()
 load_modules()
 {
   unset IFS
-  # Set indent for functions
   INDENT=' '
 
-  echo "Checking/probing Iptables modules:"
-
-  # Required; all IPv4 modules depend on this one
-  modprobe ip_tables
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    modprobe ip6_tables
-  fi
-
-  # Allows connection tracking state match, which allows you to
-  # write rules matching the state of a connection
+  # nf_tables loads its expression modules on demand, only load the basics
+  echo "Checking/probing nftables modules:"
+  modprobe nf_tables
   modprobe_multi nf_conntrack ip_conntrack
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    ## kernel >= 4.19 merged nf_conntrack_ipv{4,6} into nf_conntrack
-    if ! kernel_ver_chk 4 19 0; then
-      modprobe nf_conntrack_ipv6
-    fi
-  fi
-
-  # Allows tracking for various protocols, placing entries in the conntrack table etc.
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    modprobe_multi xt_conntrack "ipt_conntrack,ip6t_conntrack"
-  else
-    modprobe_multi xt_conntrack ipt_conntrack
-  fi
-
-  # Allows log limits
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    modprobe_multi xt_limit "ipt_limit,ip6t_limit"
-  else
-    modprobe_multi xt_limit ipt_limit
-  fi
-
-  # Permits packet state checking (SYN, SYN-ACK, ACK, and so on).
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    modprobe_multi xt_state "ipt_state,ip6t_state"
-  else
-    modprobe_multi xt_state ipt_state
-  fi
-
-  # Allows packet specifications on multiple ports
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    modprobe_multi xt_multiport "ipt_multiport,ip6t_multiport"
-  else
-    modprobe_multi xt_multiport ipt_multiport
-  fi
-
-  # Implement the filter table:
-  modprobe iptable_filter
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    modprobe ip6table_filter
-  fi
-
-  # Implement the mangle table
-  modprobe iptable_mangle
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    modprobe ip6table_mangle
-  fi
-
-  # Implement the raw table
-  modprobe iptable_raw
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    modprobe ip6table_raw
-  fi
-
-  # Implement the REJECT target
-  modprobe ipt_REJECT
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    modprobe ip6t_REJECT
-  fi
-
-  # Implement the LOG target
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    modprobe_multi xt_LOG "ipt_LOG,ip6t_LOG"
-  else
-    modprobe_multi xt_LOG ipt_LOG
-  fi
-
-  if [ "$SET_MSS" != "0" ]; then
-    # Implement the TCPMSS target
-    if [ "$IPV6_SUPPORT" = "1" ]; then
-      modprobe_multi xt_TCPMSS "ipt_TCPMSS,ip6t_TCPMSS"
-    else
-      modprobe_multi xt_TCPMSS ipt_TCPMSS
-    fi
-  fi
-
-  if [ "$MANGLE_TOS" != "0" ]; then
-    # Implement the TOS target
-    if [ "$IPV6_SUPPORT" = "1" ]; then
-      modprobe_multi xt_DSCP "ipt_DSCP,ip6t_DSCP" "ipt_TOS,ip6t_TOS"
-    else
-      modprobe_multi xt_DSCP ipt_DSCP ipt_TOS
-    fi
-  fi
-
-  if [ "$PACKET_TTL" = "1" -o "$TTL_INC" = "1" ]; then
-    # Load the TTL target:
-    modprobe ipt_TTL
-  fi
-
-  # (Currently) unused modules:
-  #    modprobe ipt_addrtype            # Allows matching src/dst address type (BROKEN!)
-  #    modprobe ipt_pkttype             # Permits checking for packet type (BROADCAST, MULTICAST etc.) (BROKEN!)
-  #    modprobe ip_queue                # Allows queuing packets to user space
-  #    modprobe ipt_owner               # Permits user/group checking on OUTPUT packets
-  #    modprobe ipt_mark                # Allows use of mark match
-  #    modprobe ip_conntrack_egg
-
-  # Implement the NAT table
-  modprobe iptable_nat
 
   if [ "$NAT" = "1" -o -n "$NAT_FORWARD_TCP" -o -n "$NAT_FORWARD_UDP" -o -n "$NAT_FORWARD_IP" ]; then
-    # Load the module implementing DNAT/SNAT/NAT support
     modprobe_multi nf_nat ip_nat
-  fi
-
-  if [ "$NAT" = "1" ]; then
-    if [ -z "$NAT_STATIC_IP" ]; then
-      # Load the MASQUERADE target:
-      modprobe ipt_MASQUERADE
-    fi
   fi
 
   echo " Module check done..."
@@ -768,6 +631,10 @@ init_firewall_chains()
   nft_chain OUTPUT "type filter hook output priority filter; policy $policy;"
   nft_chain PREROUTING "type nat hook prerouting priority dstnat; policy accept;"
   nft_chain POSTROUTING "type nat hook postrouting priority srcnat; policy accept;"
+  nft_chain MANGLE_PREROUTING "type filter hook prerouting priority mangle; policy accept;"
+  nft_chain MANGLE_FORWARD "type filter hook forward priority mangle; policy accept;"
+  nft_chain MANGLE_OUTPUT "type route hook output priority mangle; policy accept;"
+  nft_chain HELPER_PREROUTING "type filter hook prerouting priority filter; policy accept;"
 
   # IPv4 mode: drop all IPv6 except loopback, before anything else sees it
   #########################################################################
@@ -796,16 +663,11 @@ init_firewall_chains()
   nft_rule BASE_INPUT_CHAIN 'ct state related meta l4proto { icmp, ipv6-icmp } accept'
   nft_rule BASE_FORWARD_CHAIN 'ct state related meta l4proto { icmp, ipv6-icmp } accept'
 
-  # Apply conntrack helper chain, fallback to RELATED connections
-  ###############################################################
-  if kernel_ver_chk 6 0 0 || [ "$(sysctl_get_value net.netfilter.nf_conntrack_helper)" = "0" ]; then
-    nft_chain CONNTRACK_HELPER
-    nft_rule BASE_INPUT_CHAIN 'jump CONNTRACK_HELPER'
-    nft_rule BASE_FORWARD_CHAIN 'jump CONNTRACK_HELPER'
-  else
-    nft_rule BASE_INPUT_CHAIN 'ct state related meta l4proto { tcp, udp } th dport 1024-65535 accept'
-    nft_rule BASE_FORWARD_CHAIN 'ct state related meta l4proto { tcp, udp } th dport 1024-65535 accept'
-  fi
+  # Apply conntrack helper chain, helpers are assigned explicitly by load_conntrack_helper_module()
+  ###############################################################################################
+  nft_chain CONNTRACK_HELPER
+  nft_rule BASE_INPUT_CHAIN 'jump CONNTRACK_HELPER'
+  nft_rule BASE_FORWARD_CHAIN 'jump CONNTRACK_HELPER'
 
   # Drop all IPv6 packets with Routing Header Type 0
   ##################################################
@@ -833,36 +695,10 @@ init_firewall_chains()
 #######################################################################
 check_for_base_chains()
 {
-  local ipv4_rtn ipv6_rtn
-
-  ip4tables -nL BASE_INPUT_CHAIN >/dev/null 2>&1
-  ipv4_rtn=$?
-
-  if [ "$IPV6_DETECTED" = "1" ]; then
-    ip6tables -nL BASE_INPUT_CHAIN >/dev/null 2>&1
-    ipv6_rtn=$?
+  if $NFT list chain inet $NFT_TABLE BASE_INPUT_CHAIN >/dev/null 2>&1; then
+    echo "yes"
   else
-    # No IPv6 available, therefore no ip6tables call
-    # Set a return error result of 1 to specify no IPv6 BASE_INPUT_CHAIN
-    ipv6_rtn=1
-  fi
-
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    if [ $ipv4_rtn -eq 0 -a $ipv6_rtn -eq 0 ]; then
-      echo "yes"
-    elif [ $ipv4_rtn -eq 0 ]; then
-      echo "other"
-    else
-      echo "no"
-    fi
-  else
-    if [ $ipv4_rtn -eq 0 -a $ipv6_rtn -eq 0 ]; then
-      echo "other"
-    elif [ $ipv4_rtn -eq 0 ]; then
-      echo "yes"
-    else
-      echo "no"
-    fi
+    echo "no"
   fi
 }
 
@@ -885,10 +721,6 @@ setup_default_policies()
   else
     echo "IPv4 mode selected, no IPv6 available"
   fi
-
-  # The POST_INPUT_DROP_CHAIN should DROP until the rules are in place
-  ####################################################################
-  nft_rule POST_INPUT_DROP_CHAIN 'drop'
 
   # The HOST_BLOCK_SRC_DROP chain should always DROP
   ##################################################
@@ -4196,488 +4028,173 @@ setup_output_log()
 
 # Helper function for setup_hostblock_chain
 ###########################################
-setup_ipset_netset()
-{
-  local dir="$1" hashsize="$2" maxelem="$3" family netset set_name IFS
-
-  ## Setup Whitelist
-  ipset create -exist aif_whitelist hash:net family inet hashsize $hashsize maxelem $maxelem
-
-  ip4tables -A HOST_BLOCK_SRC -m set --match-set aif_whitelist src -j RETURN
-  if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-    ip4tables -A HOST_BLOCK_DST -m set --match-set aif_whitelist dst -j RETURN
-  fi
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    ipset create -exist aif_whitelistv6 hash:net family inet6 hashsize $hashsize maxelem $maxelem
-
-    ip6tables -A HOST_BLOCK_SRC -m set --match-set aif_whitelistv6 src -j RETURN
-    if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-      ip6tables -A HOST_BLOCK_DST -m set --match-set aif_whitelistv6 dst -j RETURN
-    fi
-  fi
-
-  ## Setup *.netset files
-  unset IFS
-  for netset in "$dir"/*.netset; do
-    set_name="${netset##*/}"
-    set_name="${set_name%.netset}"
-
-    ## Kernel limits set names to 31 characters, subtract 4 for _tmp
-    if [ ${#set_name} -gt 27 ]; then
-      continue
-    fi
-
-    ## Naming convention, *v6.netset files for IPv6, all other *.netset files default to IPv4
-    case $set_name in
-      *v6|*V6) family="inet6" ;;
-            *) family="inet" ;;
-    esac
-
-    if [ "$IPV6_SUPPORT" != "1" -a "$family" = "inet6" ]; then
-      continue
-    fi
-
-    ## Whitelist already setup above
-    if [ "$set_name" = "whitelist" -o "$set_name" = "whitelistv6" ]; then
-      continue
-    fi
-
-    ipset create -exist ${set_name} hash:net family $family hashsize $hashsize maxelem $maxelem
-
-    if [ "$family" = "inet" ]; then
-      ip4tables -A HOST_BLOCK_SRC -m set --match-set ${set_name} src -j HOST_BLOCK_SRC_DROP
-      if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-        ip4tables -A HOST_BLOCK_DST -m set --match-set ${set_name} dst -j HOST_BLOCK_DST_DROP
-      fi
-    else
-      ip6tables -A HOST_BLOCK_SRC -m set --match-set ${set_name} src -j HOST_BLOCK_SRC_DROP
-      if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-        ip6tables -A HOST_BLOCK_DST -m set --match-set ${set_name} dst -j HOST_BLOCK_DST_DROP
-      fi
-    fi
-  done
-}
-
-
 # Helper function for setup_hostblock_chain
 ###########################################
-apply_ipset_netset()
+# This creates the separate host block
+######################################
+# Usage: hostblock_set SET_NAME ipv4_addr|ipv6_addr SRC_VERDICT DST_VERDICT
+# Declares an interval set and matches it in the HOST_BLOCK chains
+hostblock_set()
 {
-  local dir="$1" hashsize="$2" maxelem="$3" family netset set_name swap_err IFS
-  local x default_whitelist default_whitelistv6
+  local family="ip"
 
-  default_whitelist="127.0.0.0/8 0.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 224.0.0.0/3"
-  default_whitelistv6="::1 fe80::/10 ff00::/8"
+  if [ "$2" = "ipv6_addr" ]; then
+    family="ip6"
+  fi
 
-  ## Apply Whitelist
-  unset IFS
-  for netset in "$dir/whitelist.netset" "$dir/whitelistv6.netset"; do
-    set_name="${netset##*/}"
-    set_name="aif_${set_name%.netset}"
-
-    case $set_name in
-      *v6|*V6) family="inet6" ;;
-            *) family="inet" ;;
-    esac
-
-    if [ "$IPV6_SUPPORT" != "1" -a "$family" = "inet6" ]; then
-      continue
-    fi
-
-    ipset create -exist ${set_name}_tmp hash:net family $family hashsize $hashsize maxelem $maxelem
-    ipset flush ${set_name}_tmp
-
-    if [ "$family" = "inet" ]; then
-      unset IFS
-      for x in ${DEFAULT_NETSET_WHITELIST:-$default_whitelist}; do
-        ipset add -exist ${set_name}_tmp $x
-        if [ $? -ne 0 ]; then
-          RULE_WARNING=$((RULE_WARNING + 1))
-        fi
-      done
-      if [ -f "$netset" ]; then
-        printf "Loading IPv4 Whitelist Set: whitelist.netset ... "
-        sed -n -r -e "s/^([0-9][0-9./]+)([[:space:]].*|)$/add -exist ${set_name}_tmp \1/p" "$netset" | ipset restore
-        if [ $? -ne 0 ]; then
-          RULE_WARNING=$((RULE_WARNING + 1))
-        fi
-        echo "Done."
-      fi
-    else
-      unset IFS
-      for x in ${DEFAULT_NETSET_WHITELISTV6:-$default_whitelistv6}; do
-        ipset add -exist ${set_name}_tmp $x
-        if [ $? -ne 0 ]; then
-          RULE_WARNING=$((RULE_WARNING + 1))
-        fi
-      done
-      if [ -f "$netset" ]; then
-        printf "Loading IPv6 Whitelist Set: whitelistv6.netset ... "
-        sed -n -r -e "s/^([0-9a-fA-F][0-9a-fA-F:/]+)([[:space:]].*|)$/add -exist ${set_name}_tmp \1/p" "$netset" | ipset restore
-        if [ $? -ne 0 ]; then
-          RULE_WARNING=$((RULE_WARNING + 1))
-        fi
-        echo "Done."
-      fi
-    fi
-    ipset swap ${set_name} ${set_name}_tmp
-    ipset destroy ${set_name}_tmp
-  done
-
-  ## Apply *.netset files
-  unset IFS
-  for netset in "$dir"/*.netset; do
-    set_name="${netset##*/}"
-    set_name="${set_name%.netset}"
-
-    ## Kernel limits set names to 31 characters, subtract 4 for _tmp
-    if [ ${#set_name} -gt 27 ]; then
-      printf "\033[40m\033[1;31mERROR: The \"${set_name}.netset\" name is too long, filenames are limited to <27-characters>.netstat\033[0m\n" >&2
-      RULE_WARNING=$((RULE_WARNING + 1))
-      continue
-    fi
-
-    ## Naming convention, *v6.netset files for IPv6, all other *.netset files default to IPv4
-    case $set_name in
-      *v6|*V6) family="inet6" ;;
-            *) family="inet" ;;
-    esac
-
-    if [ "$IPV6_SUPPORT" != "1" -a "$family" = "inet6" ]; then
-      continue
-    fi
-
-    ## Whitelist already applied above
-    if [ "$set_name" = "whitelist" -o "$set_name" = "whitelistv6" ]; then
-      continue
-    fi
-
-    ipset create -exist ${set_name}_tmp hash:net family $family hashsize $hashsize maxelem $maxelem
-    ipset flush ${set_name}_tmp
-
-    swap_err=0
-
-    if [ "$family" = "inet" ]; then
-      printf "Loading IPv4 Blocklist Set: ${set_name}.netset ... "
-      sed -n -r -e "s/^([0-9][0-9./]+)([[:space:]].*|)$/add -exist ${set_name}_tmp \1/p" "$netset" | ipset restore
-      if [ $? -ne 0 ]; then
-        swap_err=1
-        RULE_WARNING=$((RULE_WARNING + 1))
-      fi
-    else
-      printf "Loading IPv6 Blocklist Set: ${set_name}.netset ... "
-      sed -n -r -e "s/^([0-9a-fA-F][0-9a-fA-F:/]+)([[:space:]].*|)$/add -exist ${set_name}_tmp \1/p" "$netset" | ipset restore
-      if [ $? -ne 0 ]; then
-        swap_err=1
-        RULE_WARNING=$((RULE_WARNING + 1))
-      fi
-    fi
-
-    if [ $swap_err -eq 0 ]; then
-      ipset swap ${set_name} ${set_name}_tmp
-      echo "Done."
-    else
-      echo ""
-      printf "\033[40m\033[1;31mERROR: \"ipset swap ${set_name} ...\" not applied.\033[0m\n" >&2
-    fi
-    ipset destroy ${set_name}_tmp
-  done
+  nft_cmd "add set inet $NFT_TABLE $1 { type $2; flags interval; auto-merge; }"
+  nft_rule HOST_BLOCK_SRC "$family saddr @$1 $3"
+  if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
+    nft_rule HOST_BLOCK_DST "$family daddr @$1 $4"
+  fi
 }
 
 
-# This creates the separate host block
-######################################
+# Usage: setup_hostblock_chain [reload]
+# With "reload" the blocked hosts are reloaded into the running firewall in their own transaction
 setup_hostblock_chain()
 {
-  local hashsize maxelem swap4_err swap6_err
+  local set_name netset type hosts host x IFS
 
-  if iptables -F HOST_BLOCK_SRC 2>&1 |grep -q "No chain" || \
-     iptables -F HOST_BLOCK_DST 2>&1 |grep -q "No chain"; then
-    printf "\033[40m\033[1;31mERROR: The firewall isn't running!\033[0m\n" >&2
-    printf "\033[40m\033[1;31m       You should first run this script with the \"start\" command.\033[0m\n" >&2
-    return 5
+  if [ "$1" = "reload" ]; then
+    if ! $NFT list chain inet $NFT_TABLE HOST_BLOCK_SRC >/dev/null 2>&1; then
+      printf "\033[40m\033[1;31mERROR: The firewall isn't running!\033[0m\n" >&2
+      printf "\033[40m\033[1;31m       You should first run this script with the \"start\" command.\033[0m\n" >&2
+      return 5
+    fi
+
+    nft_begin update
+    nft_cmd "flush chain inet $NFT_TABLE HOST_BLOCK_SRC"
+    nft_cmd "flush chain inet $NFT_TABLE HOST_BLOCK_DST"
+    for set_name in $($NFT list sets table inet $NFT_TABLE 2>/dev/null |awk '$1 == "set" && $2 ~ /^aif_(block|white|netset_)/ { print $2 }'); do
+      nft_cmd "delete set inet $NFT_TABLE $set_name"
+    done
   fi
 
-  # Return if no Blocked Hosts are defined
-  if [ -z "$BLOCK_HOSTS" -a -z "$BLOCK_HOSTS_FILE" -a -z "$BLOCK_NETSET_DIR" ]; then
-    return
+  if [ -n "$BLOCK_HOSTS" -o -n "$BLOCK_HOSTS_FILE" -o -n "$BLOCK_NETSET_DIR" ]; then
+    if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
+      echo "Blocking (blackhole) direction: Inbound and Outbound"
+    else
+      echo "Blocking (blackhole) direction: Inbound Only"
+    fi
   fi
-
-  if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-    echo "Blocking (blackhole) direction: Inbound and Outbound"
-  else
-    echo "Blocking (blackhole) direction: Inbound Only"
-  fi
-
-## Use 'ipset' if enabled and available, else fallback to discrete iptables rules
-##
-if ipset_check; then
-  hashsize="${IPTABLES_IPSET_HASHSIZE:-2048}"
-  maxelem="${IPTABLES_IPSET_MAXELEM:-131072}"
 
   if [ -n "$BLOCK_HOSTS" -o -n "$BLOCK_HOSTS_FILE" ]; then
-    ipset create -exist aif_blocklist hash:net family inet hashsize $hashsize maxelem $maxelem
-
-    ip4tables -A HOST_BLOCK_SRC -m set --match-set aif_blocklist src -j HOST_BLOCK_SRC_DROP
-    if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-      ip4tables -A HOST_BLOCK_DST -m set --match-set aif_blocklist dst -j HOST_BLOCK_DST_DROP
-    fi
+    hostblock_set aif_blocklist ipv4_addr "jump HOST_BLOCK_SRC_DROP" "jump HOST_BLOCK_DST_DROP"
     if [ "$IPV6_SUPPORT" = "1" ]; then
-      ipset create -exist aif_blocklistv6 hash:net family inet6 hashsize $hashsize maxelem $maxelem
-
-      ip6tables -A HOST_BLOCK_SRC -m set --match-set aif_blocklistv6 src -j HOST_BLOCK_SRC_DROP
-      if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-        ip6tables -A HOST_BLOCK_DST -m set --match-set aif_blocklistv6 dst -j HOST_BLOCK_DST_DROP
-      fi
+      hostblock_set aif_blocklistv6 ipv6_addr "jump HOST_BLOCK_SRC_DROP" "jump HOST_BLOCK_DST_DROP"
     fi
   fi
 
+  if [ -n "$BLOCK_HOSTS" ]; then
+    printf "Blocking (blackhole) host(s): "
+
+    IFS=' ,'
+    for hosts in $BLOCK_HOSTS; do
+      printf "$hosts "
+
+      for host in `ip_range "$hosts"`; do
+        get_numeric_ip_version "$host"
+        case $? in
+          4) nft_cmd "add element inet $NFT_TABLE aif_blocklist { $host }" ;;
+          6) if [ "$IPV6_SUPPORT" = "1" ]; then
+               nft_cmd "add element inet $NFT_TABLE aif_blocklistv6 { $host }"
+             fi
+             ;;
+        esac
+      done
+    done
+    echo ""
+  fi
+
+  # Setup the blocked hosts from our file
+  if [ -n "$BLOCK_HOSTS_FILE" ]; then
+    if [ -f "$BLOCK_HOSTS_FILE" ]; then
+      echo "(Re)loading list of BLOCKED hosts from $BLOCK_HOSTS_FILE..."
+
+      # Support both a '#' and a ';' as a comment delimiter in BLOCK_HOSTS_FILE file
+      unset IFS
+      sed -e 's|[#;].*||' -e 's| *$||' -e '/^$/d' "$BLOCK_HOSTS_FILE" |while read hosts; do
+        IFS=','
+        for host in `ip_range "$hosts"`; do
+          get_numeric_ip_version "$host"
+          case $? in
+            4) nft_cmd "add element inet $NFT_TABLE aif_blocklist { $host }" ;;
+            6) if [ "$IPV6_SUPPORT" = "1" ]; then
+                 nft_cmd "add element inet $NFT_TABLE aif_blocklistv6 { $host }"
+               fi
+               ;;
+          esac
+        done
+        unset IFS
+      done
+
+      echo "$(sed -e 's|[#;].*||' -e 's| *$||' -e '/^$/d' "$BLOCK_HOSTS_FILE" |wc -l) host line(s) read"
+    else
+      printf "\033[40m\033[1;31mWARNING: Cannot read the blocked hosts file \"$BLOCK_HOSTS_FILE\".\033[0m\n"
+    fi
+  fi
+
+  # Blocklists from *.netset files, whitelisted nets are exempted from these
   if [ -d "$BLOCK_NETSET_DIR" ] && ls "$BLOCK_NETSET_DIR"/*.netset >/dev/null 2>&1; then
-    setup_ipset_netset "$BLOCK_NETSET_DIR" $hashsize $maxelem
-
-    ## Optimization, add ipsets to iptables (above) first, then apply ipset contents (below) which takes time
-
-    apply_ipset_netset "$BLOCK_NETSET_DIR" $hashsize $maxelem
-  fi
-
-  if [ -z "$BLOCK_HOSTS" -a -z "$BLOCK_HOSTS_FILE" ]; then
-    return
-  fi
-
-  ipset create -exist aif_blocklist_tmp hash:net family inet hashsize $hashsize maxelem $maxelem
-  ipset flush aif_blocklist_tmp
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    ipset create -exist aif_blocklistv6_tmp hash:net family inet6 hashsize $hashsize maxelem $maxelem
-    ipset flush aif_blocklistv6_tmp
-  fi
-
-  swap4_err=0
-  swap6_err=0
-
-  if [ -n "$BLOCK_HOSTS" ]; then
-    printf "Blocking (blackhole) host(s): "
-
-    IFS=' ,'
-    for hosts in $BLOCK_HOSTS; do
-      printf "$hosts "
-
-      for host in `ip_range "$hosts"`; do
-        get_numeric_ip_version "$host"
-        case $? in
-        4)
-          ipset add -exist aif_blocklist_tmp $host
-          if [ $? -ne 0 ]; then
-            swap4_err=1
-            RULE_WARNING=$((RULE_WARNING + 1))
-          fi
-          ;;
-        6)
-          if [ "$IPV6_SUPPORT" = "1" ]; then
-            ipset add -exist aif_blocklistv6_tmp $host
-            if [ $? -ne 0 ]; then
-              swap6_err=1
-              RULE_WARNING=$((RULE_WARNING + 1))
-            fi
-          fi
-          ;;
-        esac
-      done
+    hostblock_set aif_whitelist ipv4_addr "return" "return"
+    unset IFS
+    for x in ${DEFAULT_NETSET_WHITELIST:-127.0.0.0/8 0.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 224.0.0.0/3}; do
+      nft_cmd "add element inet $NFT_TABLE aif_whitelist { $x }"
     done
-    echo ""
-  fi
-
-  # Setup the blocked hosts from our file
-  if [ -n "$BLOCK_HOSTS_FILE" ]; then
-    if [ -f "$BLOCK_HOSTS_FILE" ]; then
-      local cur_cnt=0 total_cnt
-      total_cnt=$(( $(cat "$BLOCK_HOSTS_FILE" |sed -e 's|[#;].*||' -e 's| *$||' -e '/^$/d' |wc -l) ))
-
-      : > "$IP4TABLES_BATCH_FILE"
-      if [ "$IPV6_SUPPORT" = "1" ]; then
-        : > "$IP6TABLES_BATCH_FILE"
-      fi
-
-      echo "(Re)loading list of BLOCKED hosts from $BLOCK_HOSTS_FILE..."
-      if [ $total_cnt -gt 0 ]; then
-        progress_bar $cur_cnt $total_cnt
-
-        # Support both a '#' and a ';' as a comment delimiter in BLOCK_HOSTS_FILE file
-        unset IFS
-        cat "$BLOCK_HOSTS_FILE" |sed -e 's|[#;].*||' -e 's| *$||' -e '/^$/d' |while read hosts; do
-          cur_cnt=$((cur_cnt + 100))
-          progress_bar $cur_cnt $total_cnt
-
-          if [ -n "$hosts" ]; then
-            IFS=','
-            for host in `ip_range "$hosts"`; do
-              get_numeric_ip_version "$host"
-              case $? in
-              4)
-                echo "add -exist aif_blocklist_tmp $host" >> "$IP4TABLES_BATCH_FILE"
-                ;;
-              6)
-                if [ "$IPV6_SUPPORT" = "1" ]; then
-                  echo "add -exist aif_blocklistv6_tmp $host" >> "$IP6TABLES_BATCH_FILE"
-                fi
-                ;;
-              esac
-            done
-            unset IFS
-          fi
-        done
-        printf "........."
-      fi
-
-      echo "$total_cnt host line(s) read"
-
-      ipset restore < "$IP4TABLES_BATCH_FILE"
-      if [ $? -ne 0 ]; then
-        swap4_err=1
-        RULE_WARNING=$((RULE_WARNING + 1))
-      fi
-      rm -f "$IP4TABLES_BATCH_FILE"
-      if [ "$IPV6_SUPPORT" = "1" ]; then
-        ipset restore < "$IP6TABLES_BATCH_FILE"
-        if [ $? -ne 0 ]; then
-          swap6_err=1
-          RULE_WARNING=$((RULE_WARNING + 1))
-        fi
-        rm -f "$IP6TABLES_BATCH_FILE"
-      fi
-    else
-      printf "\033[40m\033[1;31mWARNING: Cannot read the blocked hosts file \"$BLOCK_HOSTS_FILE\".\033[0m\n"
-    fi
-  fi
-
-  if [ $swap4_err -eq 0 ]; then
-    ipset swap aif_blocklist aif_blocklist_tmp
-  else
-    printf "\033[40m\033[1;31mERROR: IPv4 \"ipset swap ...\" not applied.\033[0m\n" >&2
-  fi
-  ipset destroy aif_blocklist_tmp
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    if [ $swap6_err -eq 0 ]; then
-      ipset swap aif_blocklistv6 aif_blocklistv6_tmp
-    else
-      printf "\033[40m\033[1;31mERROR: IPv6 \"ipset swap ...\" not applied.\033[0m\n" >&2
-    fi
-    ipset destroy aif_blocklistv6_tmp
-  fi
-else
-  if [ -z "$BLOCK_HOSTS" -a -z "$BLOCK_HOSTS_FILE" ]; then
-    return
-  fi
-
-  # Set default to DROP all while rules are added
-  iptables -A HOST_BLOCK_SRC -j DROP
-  iptables -A HOST_BLOCK_DST -j DROP
-
-  iptables_batch start
-  iptables_batch init HOST_BLOCK_SRC
-  iptables_batch init HOST_BLOCK_DST
-
-  if [ -n "$BLOCK_HOSTS" ]; then
-    printf "Blocking (blackhole) host(s): "
-
-    IFS=' ,'
-    for hosts in $BLOCK_HOSTS; do
-      printf "$hosts "
-
-      for host in `ip_range "$hosts"`; do
-        get_numeric_ip_version "$host"
-        case $? in
-        4)
-          ip4tables_batch -A HOST_BLOCK_SRC -s $host -j HOST_BLOCK_SRC_DROP
-          if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-            ip4tables_batch -A HOST_BLOCK_DST -d $host -j HOST_BLOCK_DST_DROP
-          fi
-          ;;
-        6)
-          if [ "$IPV6_SUPPORT" = "1" ]; then
-            ip6tables_batch -A HOST_BLOCK_SRC -s $host -j HOST_BLOCK_SRC_DROP
-            if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-              ip6tables_batch -A HOST_BLOCK_DST -d $host -j HOST_BLOCK_DST_DROP
-            fi
-          fi
-          ;;
-        esac
+    if [ "$IPV6_SUPPORT" = "1" ]; then
+      hostblock_set aif_whitelistv6 ipv6_addr "return" "return"
+      for x in ${DEFAULT_NETSET_WHITELISTV6:-::1 fe80::/10 ff00::/8}; do
+        nft_cmd "add element inet $NFT_TABLE aif_whitelistv6 { $x }"
       done
-    done
-    echo ""
-  fi
+    fi
 
+    for netset in "$BLOCK_NETSET_DIR"/*.netset; do
+      set_name="${netset##*/}"
+      set_name="${set_name%.netset}"
 
-  # Setup the blocked hosts from our file
-  if [ -n "$BLOCK_HOSTS_FILE" ]; then
-    if [ -f "$BLOCK_HOSTS_FILE" ]; then
-      local cur_cnt=0 total_cnt
-      total_cnt=$(( $(cat "$BLOCK_HOSTS_FILE" |sed -e 's|[#;].*||' -e 's| *$||' -e '/^$/d' |wc -l) ))
+      ## Naming convention, *v6.netset files for IPv6, all other *.netset files default to IPv4
+      case $set_name in
+        *v6|*V6) type="ipv6_addr" ;;
+              *) type="ipv4_addr" ;;
+      esac
 
-      echo "(Re)loading list of BLOCKED hosts from $BLOCK_HOSTS_FILE..."
-      if [ $total_cnt -gt 0 ]; then
-        progress_bar $cur_cnt $total_cnt
-
-        # Support both a '#' and a ';' as a comment delimiter in BLOCK_HOSTS_FILE file
-        unset IFS
-        cat "$BLOCK_HOSTS_FILE" |sed -e 's|[#;].*||' -e 's| *$||' -e '/^$/d' |while read hosts; do
-          cur_cnt=$((cur_cnt + 100))
-          progress_bar $cur_cnt $total_cnt
-
-          if [ -n "$hosts" ]; then
-            IFS=','
-            for host in `ip_range "$hosts"`; do
-              get_numeric_ip_version "$host"
-              case $? in
-              4)
-                ip4tables_batch -A HOST_BLOCK_SRC -s $host -j HOST_BLOCK_SRC_DROP
-                if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-                  ip4tables_batch -A HOST_BLOCK_DST -d $host -j HOST_BLOCK_DST_DROP
-                fi
-                ;;
-              6)
-                if [ "$IPV6_SUPPORT" = "1" ]; then
-                  ip6tables_batch -A HOST_BLOCK_SRC -s $host -j HOST_BLOCK_SRC_DROP
-                  if [ "$BLOCK_HOSTS_BIDIRECTIONAL" != "0" ]; then
-                    ip6tables_batch -A HOST_BLOCK_DST -d $host -j HOST_BLOCK_DST_DROP
-                  fi
-                fi
-                ;;
-              esac
-            done
-            unset IFS
-          fi
-        done
-        printf "........."
+      if [ "$IPV6_SUPPORT" != "1" -a "$type" = "ipv6_addr" ]; then
+        continue
       fi
 
-      echo "$total_cnt host line(s) read"
-    else
-      printf "\033[40m\033[1;31mWARNING: Cannot read the blocked hosts file \"$BLOCK_HOSTS_FILE\".\033[0m\n"
-    fi
+      case $set_name in
+        whitelist|whitelistv6) set_name="aif_$set_name" ;;
+                            *) set_name="aif_netset_$set_name"
+                               hostblock_set "$set_name" $type "jump HOST_BLOCK_SRC_DROP" "jump HOST_BLOCK_DST_DROP"
+                               ;;
+      esac
+
+      printf "Loading Set: ${netset##*/} ... "
+      if [ "$type" = "ipv4_addr" ]; then
+        sed -n -r -e "s/^([0-9][0-9./]+)([[:space:]].*|)$/add element inet $NFT_TABLE $set_name { \1 }/p" "$netset" >>"$NFT_BATCH"
+      else
+        sed -n -r -e "s/^([0-9a-fA-F][0-9a-fA-F:/]+)([[:space:]].*|)$/add element inet $NFT_TABLE $set_name { \1 }/p" "$netset" >>"$NFT_BATCH"
+      fi
+      echo "Done."
+    done
   fi
 
-  iptables_batch apply HOST_BLOCK_SRC
-  iptables_batch apply HOST_BLOCK_DST
-  iptables_batch stop
-
-  # All Blocked Host rules are applied
-  # Remove default rule at the beginning of the HOST_BLOCK_SRC and HOST_BLOCK_DST chains
-  iptables -D HOST_BLOCK_SRC 1
-  iptables -D HOST_BLOCK_DST 1
-fi
+  if [ "$1" = "reload" ]; then
+    nft_commit
+  fi
 }
 
 
 setup_mangle_tables()
 {
-  # The following line is intended to hide the firewall during a traceroute.
-  ##########################################################################
+  local interface family IFS
+
+  # The TTL-increase trick to hide the firewall during a traceroute cannot be
+  # done with nftables, it can only set a fixed TTL
+  ###########################################################################
   if [ "$TTL_INC" = "1" ]; then
-    echo "Enabling TTL-increase for the PREROUTING chain"
-    IFS=' ,'
-    for interface in $EXT_IF; do
-      ip4tables -t mangle -A PREROUTING -i $interface -j TTL --ttl-inc 1
-    done
+    printf "\033[40m\033[1;31m WARNING: TTL_INC is not supported with nftables and is ignored!\033[0m\n" >&2
   fi
 
   # Set TTL on outgoing & forwarded packets:
@@ -4687,8 +4204,8 @@ setup_mangle_tables()
       echo "Setting TTL=$PACKET_TTL for the FORWARD & OUTPUT chains"
       IFS=' ,'
       for interface in $EXT_IF; do
-        ip4tables -t mangle -A FORWARD -o $interface -j TTL --ttl-set $PACKET_TTL
-        ip4tables -t mangle -A OUTPUT -o $interface -j TTL --ttl-set $PACKET_TTL
+        nft_rule MANGLE_FORWARD "$(nft_if oifname $interface) ip ttl set $PACKET_TTL"
+        nft_rule MANGLE_OUTPUT "$(nft_if oifname $interface) ip ttl set $PACKET_TTL"
       done
     else
       printf "\033[40m\033[1;31m WARNING: Ignoring invalid value for PACKET_TTL ($PACKET_TTL), it should be between 10 and 255!\033[0m\n" >&2
@@ -4697,80 +4214,45 @@ setup_mangle_tables()
 
   # Mangles the TOS on standard ports so they get priority in routers
   ###################################################################
-  # TOS table
-  # Options:
-  #               Normal-Service = 0 (0x00)
-  #               Minimize-Cost = 2 (0x02)
-  #               Maximize-Reliability = 4 (0x04)
-  #               Maximize-Throughput = 8 (0x08)
-  #               Minimize-Delay = 16 (0x10)
+  # TOS values are set through the DSCP field (TOS >> 2):
+  #               Maximize-Throughput = 8 (0x08) = DSCP 0x02
+  #               Minimize-Delay = 16 (0x10) = DSCP 0x04
+  # Most of these are the RFC 1060/1349 suggested TOS values, yours might vary.
   if [ "$MANGLE_TOS" = "1" ]; then
     echo "Enabling mangling TOS"
-    # ToS: Client Applications; data => tos_client
-    # Most of these are the RFC 1060/1349 suggested TOS values, yours might vary.
-    # To view mangle table, type: iptables -L -t mangle
-    IFS=' ,'
-    for interface in $EXT_IF; do
-      # Mangle values of packets created locally.
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 20 -j TOS --set-tos Maximize-Throughput
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 21 -j TOS --set-tos Minimize-Delay
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 22 -j TOS --set-tos Minimize-Delay
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 23 -j TOS --set-tos Minimize-Delay
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 25 -j TOS --set-tos Minimize-Delay
-      iptables -t mangle -A OUTPUT -o $interface -p udp --dport 53 -j TOS --set-tos Maximize-Throughput
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 67 -j TOS --set-tos Minimize-Delay
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 80 -j TOS --set-tos Maximize-Throughput
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 110 -j TOS --set-tos Maximize-Throughput
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 113 -j TOS --set-tos Minimize-Delay
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 123 -j TOS --set-tos Minimize-Delay
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 143 -j TOS --set-tos Maximize-Throughput
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 443 -j TOS --set-tos Maximize-Throughput
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 993 -j TOS --set-tos Maximize-Throughput
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 995 -j TOS --set-tos Maximize-Throughput
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 1080 -j TOS --set-tos Minimize-Delay
-      iptables -t mangle -A OUTPUT -o $interface -p tcp --dport 6000:6063 -j TOS --set-tos Maximize-Throughput
-    done
+    for family in ip ip6; do
+      IFS=' ,'
+      for interface in $EXT_IF; do
+        # Mangle values of packets created locally.
+        nft_rule MANGLE_OUTPUT "$(nft_if oifname $interface) tcp dport { 20, 80, 110, 143, 443, 993, 995, 6000-6063 } $family dscp set 0x02"
+        nft_rule MANGLE_OUTPUT "$(nft_if oifname $interface) tcp dport { 21, 22, 23, 25, 67, 113, 123, 1080 } $family dscp set 0x04"
+        nft_rule MANGLE_OUTPUT "$(nft_if oifname $interface) udp dport 53 $family dscp set 0x02"
+      done
 
-    # Rules to mangle TOS values of packets routed through the firewall
-    iptables -t mangle -A PREROUTING -p tcp --dport 20 -j TOS --set-tos Maximize-Throughput
-    iptables -t mangle -A PREROUTING -p tcp --dport 21 -j TOS --set-tos Minimize-Delay
-    iptables -t mangle -A PREROUTING -p tcp --dport 22 -j TOS --set-tos Minimize-Delay
-    iptables -t mangle -A PREROUTING -p tcp --dport 23 -j TOS --set-tos Minimize-Delay
-    iptables -t mangle -A PREROUTING -p tcp --dport 25 -j TOS --set-tos Minimize-Delay
-    iptables -t mangle -A PREROUTING -p udp --dport 53 -j TOS --set-tos Minimize-Delay
-    iptables -t mangle -A PREROUTING -p tcp --dport 67 -j TOS --set-tos Minimize-Delay
-    iptables -t mangle -A PREROUTING -p tcp --dport 80 -j TOS --set-tos Maximize-Throughput
-    iptables -t mangle -A PREROUTING -p tcp --dport 110 -j TOS --set-tos Maximize-Throughput
-    iptables -t mangle -A PREROUTING -p tcp --dport 113 -j TOS --set-tos Minimize-Delay
-    iptables -t mangle -A PREROUTING -p tcp --dport 123 -j TOS --set-tos Minimize-Delay
-    iptables -t mangle -A PREROUTING -p tcp --dport 143 -j TOS --set-tos Maximize-Throughput
-    iptables -t mangle -A PREROUTING -p tcp --dport 443 -j TOS --set-tos Maximize-Throughput
-    iptables -t mangle -A PREROUTING -p tcp --dport 993 -j TOS --set-tos Maximize-Throughput
-    iptables -t mangle -A PREROUTING -p tcp --dport 995 -j TOS --set-tos Maximize-Throughput
-    iptables -t mangle -A PREROUTING -p tcp --dport 1080 -j TOS --set-tos Minimize-Delay
-    iptables -t mangle -A PREROUTING -p tcp --dport 6000:6063 -j TOS --set-tos Maximize-Throughput
+      # Rules to mangle TOS values of packets routed through the firewall
+      nft_rule MANGLE_PREROUTING "tcp dport { 20, 80, 110, 143, 443, 993, 995, 6000-6063 } $family dscp set 0x02"
+      nft_rule MANGLE_PREROUTING "tcp dport { 21, 22, 23, 25, 67, 113, 123, 1080 } $family dscp set 0x04"
+      nft_rule MANGLE_PREROUTING "udp dport 53 $family dscp set 0x04"
+    done
   fi
 }
 
 
 setup_tcp_mss()
 {
+  local interface IFS
+
   # Besides MTU, there is yet another way to set the maximum packet size, the so called Maximum Segment Size.
   # This is a field in the TCP Options part of a SYN packet.
   # The good thing about this is that by setting the MSS value, you are telling the remote side unequivocally
   # 'do not ever try to send me packets bigger than this value'. No ICMP traffic is needed to get this to work.
-  # In order for this to work you need at least iptables-1.2.1a and Linux 2.4.3 or higher.
   ##################################################################################################################
   if [ "$SET_MSS" = "1" ]; then
     echo "Enabling setting the maximum packet size via MSS"
     IFS=' ,'
     for interface in $EXT_IF; do
-      iptables -A FORWARD -o $interface -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-      iptables -A OUTPUT -o $interface -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-
-      if [ "$NAT" = "1" ]; then
-        ip4tables -t nat -A POSTROUTING -o $interface -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-      fi
+      nft_rule MANGLE_FORWARD "$(nft_if oifname $interface) tcp flags & (syn|rst) == syn tcp option maxseg size set rt mtu"
+      nft_rule MANGLE_OUTPUT "$(nft_if oifname $interface) tcp flags & (syn|rst) == syn tcp option maxseg size set rt mtu"
     done
   fi
 }
@@ -5160,23 +4642,18 @@ setup_firewall_rules()
 
   # Setup basic input/forward/output/... chains
   #############################################
-  iptables -A INPUT -j INPUT_CHAIN
-  iptables -A FORWARD -j FORWARD_CHAIN
-  iptables -A OUTPUT -j OUTPUT_CHAIN
-  ip4tables -t nat -A PREROUTING -j NAT_PREROUTING_CHAIN
-  ip4tables -t nat -A POSTROUTING -j NAT_POSTROUTING_CHAIN
+  nft_rule INPUT "jump INPUT_CHAIN"
+  nft_rule FORWARD "jump FORWARD_CHAIN"
+  nft_rule OUTPUT "jump OUTPUT_CHAIN"
+  nft_rule PREROUTING "meta nfproto ipv4 jump NAT_PREROUTING_CHAIN"
+  nft_rule POSTROUTING "meta nfproto ipv4 jump NAT_POSTROUTING_CHAIN"
 
   # Block all hosts in the custom blocked hosts file
   ##################################################
-  iptables -A INPUT -j HOST_BLOCK_SRC
-  iptables -A FORWARD -j HOST_BLOCK_SRC
-  iptables -A FORWARD -j HOST_BLOCK_DST
-  iptables -A OUTPUT -j HOST_BLOCK_DST
-
-  # Allow DNS out for plugins and iptables while setting up rules
-  ###############################################################
-  iptables -A OUTPUT_CHAIN -p udp --dport 53 -j ACCEPT
-  iptables -A OUTPUT_CHAIN -p tcp --dport 53 -j ACCEPT
+  nft_rule INPUT "jump HOST_BLOCK_SRC"
+  nft_rule FORWARD "jump HOST_BLOCK_SRC"
+  nft_rule FORWARD "jump HOST_BLOCK_DST"
+  nft_rule OUTPUT "jump HOST_BLOCK_DST"
 
   # Setup global helper chains
   ############################
@@ -5186,7 +4663,7 @@ setup_firewall_rules()
 
   # Check if source address is spoofed
   ####################################
-  iptables -A INPUT -j SPOOF_CHK
+  nft_rule INPUT "jump SPOOF_CHK"
 
   # Setup rules for input/output logging
   ######################################
@@ -5211,9 +4688,8 @@ setup_firewall_rules()
   # NOTE: Fragmentation cannot happen with IPv6 (and probably even not with iptables/IPv4)
   ########################################################################################
   if [ "$FRAG_DROP" = "1" ]; then
-    ip4tables -A OUTPUT -f \
-      -m limit --limit 3/m -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Fragment packet: "
-    ip4tables -A OUTPUT -f -j DROP
+    nft_rule OUTPUT "meta nfproto ipv4 ip frag-off & 0x1fff != 0 limit rate 3/minute burst 5 packets log prefix \"AIF:Fragment packet: \" level $LOGLEVEL"
+    nft_rule OUTPUT "meta nfproto ipv4 ip frag-off & 0x1fff != 0 drop"
   fi
 
   # Setup helper chains for EXTERNAL input traffic:
@@ -5234,17 +4710,17 @@ setup_firewall_rules()
 
     # Apply external (internet) interface policy for the output chain:
     ##################################################################
-    iptables -A OUTPUT -o $interface -j EXT_OUTPUT_CHAIN
+    nft_rule OUTPUT "$(nft_if oifname $interface) jump EXT_OUTPUT_CHAIN"
 
     # We must allow special icmpv6 packets since CONNTRACK doesn't handle all icmpv6 types:
     #######################################################################################
     if [ "$IPV6_SUPPORT" = "1" -a "$OPEN_ICMPV6" != "0" ]; then
       for icmpv6_type in $ICMPV6_SPECIAL_TYPES; do
-        ip6tables -A INPUT -i $interface -p icmpv6 --icmpv6-type $icmpv6_type -m hl --hl-eq 255 -j ACCEPT
+        nft_rule INPUT "$(nft_if iifname $interface) ip6 hoplimit 255 icmpv6 type $icmpv6_type accept"
       done
       if [ "$OPEN_ICMPV6_MLD" = "1" ]; then
         for icmpv6_type in $ICMPV6_MLD_TYPES; do
-          ip6tables -A INPUT -i $interface -p icmpv6 --icmpv6-type $icmpv6_type -s fe80::/10 -m hl --hl-eq 1 -j ACCEPT
+          nft_rule INPUT "$(nft_if iifname $interface) ip6 saddr fe80::/10 ip6 hoplimit 1 icmpv6 type $icmpv6_type accept"
         done
       fi
     fi
@@ -5252,23 +4728,22 @@ setup_firewall_rules()
     # Apply external (internet) interface policy for the input chain:
     #################################################################
     # Check packets for invalid flags:
-    iptables -A INPUT -i $interface -j VALID_CHK
+    nft_rule INPUT "$(nft_if iifname $interface) jump VALID_CHK"
 
     # Perform check:
     ################
     # Non-ICMP traffic:
-    iptables -A INPUT -i $interface ! -p icmp $NF_CONNTRACK_STATE NEW -j EXT_INPUT_CHAIN
+    nft_rule INPUT "$(nft_if iifname $interface) ct state new meta l4proto != { icmp, ipv6-icmp } jump EXT_INPUT_CHAIN"
 
     # ICMP traffic (rate limited):
-    iptables -A INPUT -i $interface -p icmp $NF_CONNTRACK_STATE NEW \
-      -m limit --limit 60/second --limit-burst 100 -j EXT_INPUT_CHAIN
+    nft_rule INPUT "$(nft_if iifname $interface) ct state new meta l4proto { icmp, ipv6-icmp } limit rate 60/second burst 100 packets jump EXT_INPUT_CHAIN"
 
     # ICMP traffic (flood)
-    iptables -A INPUT -i $interface -p icmp $NF_CONNTRACK_STATE NEW -j EXT_ICMP_FLOOD_CHAIN
+    nft_rule INPUT "$(nft_if iifname $interface) ct state new meta l4proto { icmp, ipv6-icmp } jump EXT_ICMP_FLOOD_CHAIN"
 
     # Drop any remaining ICMPv6 traffic
     if [ "$IPV6_SUPPORT" = "1" ]; then
-      ip6tables -A INPUT -i $interface -p icmpv6 -j POST_INPUT_DROP_CHAIN
+      nft_rule INPUT "meta nfproto ipv6 $(nft_if iifname $interface) meta l4proto ipv6-icmp jump POST_INPUT_DROP_CHAIN"
     fi
   done
 
@@ -5283,8 +4758,8 @@ setup_firewall_rules()
     IFS=' ,'
     for interface in $INT_IF; do
       echo "Applying internal(LAN) policy to interface: $interface"
-      iptables -A INPUT -i $interface -j INT_INPUT_CHAIN
-      iptables -A OUTPUT -o $interface -j INT_OUTPUT_CHAIN
+      nft_rule INPUT "$(nft_if iifname $interface) jump INT_INPUT_CHAIN"
+      nft_rule OUTPUT "$(nft_if oifname $interface) jump INT_OUTPUT_CHAIN"
     done
   fi
 
@@ -5298,8 +4773,8 @@ setup_firewall_rules()
     IFS=' ,'
     for interface in $DMZ_IF; do
       echo "Applying DMZ policy to interface: $interface"
-      iptables -A INPUT -i $interface -j DMZ_INPUT_CHAIN
-      iptables -A OUTPUT -o $interface -j DMZ_OUTPUT_CHAIN
+      nft_rule INPUT "$(nft_if iifname $interface) jump DMZ_INPUT_CHAIN"
+      nft_rule OUTPUT "$(nft_if oifname $interface) jump DMZ_OUTPUT_CHAIN"
     done
   fi
 
@@ -5309,24 +4784,21 @@ setup_firewall_rules()
     echo "Accepting ALL INPUT packets from trusted interface(s): $TRUSTED_IF"
     IFS=' ,'
     for interface in $TRUSTED_IF; do
-      iptables -A INPUT -i $interface -j ACCEPT
+      nft_rule INPUT "$(nft_if iifname $interface) accept"
     done
   fi
 
   # Jump to the POST INPUT chain
   ##############################
-  iptables -A INPUT -j POST_INPUT_CHAIN
+  nft_rule INPUT "jump POST_INPUT_CHAIN"
 
   # Everything else is logged & dropped in INPUT (just in case)...
   ################################################################
-  iptables -A INPUT -m limit --limit 1/s -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Dropped INPUT packet: "
-  iptables -A INPUT -j DROP
+  nft_rule INPUT "limit rate 1/second burst 5 packets log prefix \"AIF:Dropped INPUT packet: \" level $LOGLEVEL"
+  nft_rule INPUT "drop"
 
   # Drop all packets at the end of the POST_INPUT_DROP_CHAIN
-  iptables -A POST_INPUT_DROP_CHAIN -j DROP
-
-  # Remove the temp rule at the beginning of the POST_INPUT_DROP_CHAIN
-  iptables -D POST_INPUT_DROP_CHAIN 1
+  nft_rule POST_INPUT_DROP_CHAIN "drop"
 
   ###############################################################################################
   # FORWARD rules                                                                               #
@@ -5336,8 +4808,8 @@ setup_firewall_rules()
   ########################################################
   if [ "$IPV6_SUPPORT" = "1" ]; then
     if [ "$FORWARD_LINK_LOCAL" != "1" ]; then
-      ip6tables -A FORWARD -s fe80::/10 -j LINK_LOCAL_DROP
-      ip6tables -A FORWARD -d fe80::/10 -j LINK_LOCAL_DROP
+      nft_rule FORWARD "ip6 saddr fe80::/10 jump LINK_LOCAL_DROP"
+      nft_rule FORWARD "ip6 daddr fe80::/10 jump LINK_LOCAL_DROP"
     else
       echo "IPv6 Link-Local Addresses are forwarded!"
     fi
@@ -5350,9 +4822,9 @@ setup_firewall_rules()
     IFS=' ,'
     for interface in $TRUSTED_IF; do
       # Allow forward traffic in:
-      iptables -A FORWARD -i $interface -j ACCEPT
+      nft_rule FORWARD "$(nft_if iifname $interface) accept"
       # Allow forward traffic out:
-      iptables -A FORWARD -o $interface -j ACCEPT
+      nft_rule FORWARD "$(nft_if oifname $interface) accept"
     done
   fi
 
@@ -5360,30 +4832,30 @@ setup_firewall_rules()
   ########################################################
   IFS=' ,'
   for eif in $EXT_IF; do
-    iptables -A FORWARD -i $eif -j EXT_FORWARD_IN_CHAIN
-    iptables -A FORWARD -o $eif -j EXT_FORWARD_OUT_CHAIN
+    nft_rule FORWARD "$(nft_if iifname $eif) jump EXT_FORWARD_IN_CHAIN"
+    nft_rule FORWARD "$(nft_if oifname $eif) jump EXT_FORWARD_OUT_CHAIN"
   done
 
   # Source the IN/OUT chains for the dmz interface(s)
   ########################################################
   IFS=' ,'
   for dif in $DMZ_IF; do
-    iptables -A FORWARD -i $dif -j DMZ_FORWARD_IN_CHAIN
-    iptables -A FORWARD -o $dif -j DMZ_FORWARD_OUT_CHAIN
+    nft_rule FORWARD "$(nft_if iifname $dif) jump DMZ_FORWARD_IN_CHAIN"
+    nft_rule FORWARD "$(nft_if oifname $dif) jump DMZ_FORWARD_OUT_CHAIN"
   done
 
   # Check source address for spoofing
   ###################################
-  iptables -A FORWARD -j SPOOF_CHK
+  nft_rule FORWARD "jump SPOOF_CHK"
 
   # Check if the incoming packet is (in)valid
   ###########################################
-  iptables -A EXT_FORWARD_IN_CHAIN -j VALID_CHK
+  nft_rule EXT_FORWARD_IN_CHAIN "jump VALID_CHK"
 
   # Check if incoming packet sources are (in)valid
   ################################################
   if [ "$RESERVED_NET_DROP" = "1" -o "$RESERVED_NET_LOG" = "1" ]; then
-    iptables -A EXT_FORWARD_IN_CHAIN -j RESERVED_NET_CHK
+    nft_rule EXT_FORWARD_IN_CHAIN "jump RESERVED_NET_CHK"
   fi
 
   # Setup forward policy for the DMZ
@@ -5416,25 +4888,25 @@ setup_firewall_rules()
       echo "Applying DMZ FORWARD policy to interface: $dif"
 
       # Always make subnets on the SAME interface trust each other
-      iptables -A FORWARD -i $dif -o $dif -j ACCEPT
+      nft_rule FORWARD "$(nft_if iifname $dif) $(nft_if oifname $dif) accept"
 
       for eif in $EXT_IF; do
         # Apply policy for inet->DMZ traffic
-        iptables -A FORWARD -i $eif -o $dif -j INET_DMZ_FORWARD_CHAIN
+        nft_rule FORWARD "$(nft_if iifname $eif) $(nft_if oifname $dif) jump INET_DMZ_FORWARD_CHAIN"
 
         # Apply policy for DMZ->inet traffic
-        iptables -A FORWARD -i $dif -o $eif -j DMZ_INET_FORWARD_CHAIN
+        nft_rule FORWARD "$(nft_if iifname $dif) $(nft_if oifname $eif) jump DMZ_INET_FORWARD_CHAIN"
       done
 
       # Apply policy for DMZ->LAN traffic & LAN->DMZ traffic
       for iif in $INT_IF; do
         # Apply policy for DMZ->LAN
-        iptables -A FORWARD -i $dif -o $iif -j DMZ_LAN_FORWARD_CHAIN
+        nft_rule FORWARD "$(nft_if iifname $dif) $(nft_if oifname $iif) jump DMZ_LAN_FORWARD_CHAIN"
 
         # Apply policy for LAN->DMZ (allow all INT_IF when LAN_DMZ_ALLOW_IF is not defined)
         for interface in ${LAN_DMZ_ALLOW_IF:-$INT_IF}; do
           if [ "$iif" = "$interface" ]; then
-            iptables -A FORWARD -i $iif -o $dif -j ACCEPT
+            nft_rule FORWARD "$(nft_if iifname $iif) $(nft_if oifname $dif) accept"
             break
           fi
         done
@@ -5451,7 +4923,7 @@ setup_firewall_rules()
     for input_if in $if_group; do
       for output_if in $if_group; do
         if [ "$input_if" != "$output_if" ]; then
-          iptables -A FORWARD -i $input_if -o $output_if -j ACCEPT
+          nft_rule FORWARD "$(nft_if iifname $input_if) $(nft_if oifname $output_if) accept"
         fi
       done
     done
@@ -5481,19 +4953,19 @@ setup_firewall_rules()
       echo "Applying internal(LAN) FORWARD policy to interface: $iif"
 
       # Always make subnets on the SAME interface trust each other
-      iptables -A FORWARD -i $iif -o $iif -j ACCEPT
+      nft_rule FORWARD "$(nft_if iifname $iif) $(nft_if oifname $iif) accept"
 
       # Optimize by only adding to FORWARD if LAN_LAN_FORWARD_CHAIN contains rules
       if [ $lan_lan_forward_result -eq 0 ]; then
         for output_if in $INT_IF; do
           if [ "$iif" != "$output_if" ]; then
-            iptables -A FORWARD -i $iif -o $output_if -j LAN_LAN_FORWARD_CHAIN
+            nft_rule FORWARD "$(nft_if iifname $iif) $(nft_if oifname $output_if) jump LAN_LAN_FORWARD_CHAIN"
           fi
         done
       fi
 
       for eif in $EXT_IF; do
-        iptables -A FORWARD -i $iif -o $eif -j LAN_INET_FORWARD_CHAIN
+        nft_rule FORWARD "$(nft_if iifname $iif) $(nft_if oifname $eif) jump LAN_INET_FORWARD_CHAIN"
       done
     done
     unset lan_lan_forward_result
@@ -5523,7 +4995,7 @@ setup_firewall_rules()
             # No more IPs specified for the remaining interfaces
             break
           fi
-          ip4tables -t nat -A POSTROUTING -o $interface -s $net ! -d $net -j SNAT --to-source $STATIC_IP
+          nft_rule POSTROUTING "meta nfproto ipv4 $(nft_if oifname $interface) $(nft_addr saddr $net) $(nft_addr daddr $net !=) snat ip to $STATIC_IP"
         done
       done
       echo ""
@@ -5538,7 +5010,7 @@ setup_firewall_rules()
 
         for interface in $NAT_IF; do
           # The "! -d $net" is to avoid problems with Freeswan etc.
-          ip4tables -t nat -A POSTROUTING -o $interface -s $net ! -d $net -j MASQUERADE
+          nft_rule POSTROUTING "meta nfproto ipv4 $(nft_if oifname $interface) $(nft_addr saddr $net) $(nft_addr daddr $net !=) masquerade"
         done
       done
       echo ""
@@ -5557,18 +5029,19 @@ setup_firewall_rules()
       echo "$(show_if_ip "$interfaces" "$destips")Forwarding(NAT) TCP port(s) $(show_hosts_ports "$shosts" "$ports") to $(echo "$dhost_dport" |tr "$SEP-" '::')"
 
       IFS=' ,'
-      for shost in `ip_range "$shosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
         for port in $ports; do
           for destip in $destips; do
             # Portforward for all specified interfaces
             for eif in $interfaces; do
               # This code makes it possible to forward to a different port on the internal host
               dport=`get_ports_hp "$dhost_dport" "$port"`
+              dnat_to="$(echo "$dhost_dport" |sed -e "s/$SEP/:/" -e 's/:\([0-9]*\):\([0-9]*\)$/:\1-\2/')"
 
-              ip4tables -t nat -A PREROUTING -i $eif -s $shost -d $destip -p tcp --dport $port -j DNAT --to-destination `echo "$dhost_dport" |tr "$SEP-" '::'`
+              nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $eif) $(nft_addr saddr $shost) $(nft_addr daddr $destip) tcp dport $port dnat ip to $dnat_to"
               dhost=`get_hosts_hp "$dhost_dport"`
               if [ -n "$dhost" ]; then
-                ip4tables -A EXT_FORWARD_IN_CHAIN -i $eif ! -o $eif -s $shost -d $dhost -p tcp --dport $dport -j ACCEPT
+                nft_rule EXT_FORWARD_IN_CHAIN "meta nfproto ipv4 ct status dnat $(nft_if iifname $eif) $(nft_if oifname $eif !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $dport accept"
               fi
             done
           done
@@ -5587,18 +5060,19 @@ setup_firewall_rules()
       echo "$(show_if_ip "$interfaces" "$destips")Forwarding(NAT) UDP port(s) $(show_hosts_ports "$shosts" "$ports") to $(echo "$dhost_dport" |tr "$SEP-" '::')"
 
       IFS=' ,'
-      for shost in `ip_range "$shosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
         for port in $ports; do
           for destip in $destips; do
             # Portforward for all specified interfaces
             for eif in $interfaces; do
               # This code makes it possible to forward to a different port on the internal host
               dport=`get_ports_hp "$dhost_dport" "$port"`
+              dnat_to="$(echo "$dhost_dport" |sed -e "s/$SEP/:/" -e 's/:\([0-9]*\):\([0-9]*\)$/:\1-\2/')"
 
-              ip4tables -t nat -A PREROUTING -i $eif -s $shost -d $destip -p udp --dport $port -j DNAT --to-destination `echo "$dhost_dport" |tr "$SEP-" '::'`
+              nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $eif) $(nft_addr saddr $shost) $(nft_addr daddr $destip) udp dport $port dnat ip to $dnat_to"
               dhost=`get_hosts_hp "$dhost_dport"`
               if [ -n "$dhost" ]; then
-                ip4tables -A EXT_FORWARD_IN_CHAIN -i $eif ! -o $eif -s $shost -d $dhost -p udp --dport $dport -j ACCEPT
+                nft_rule EXT_FORWARD_IN_CHAIN "meta nfproto ipv4 ct status dnat $(nft_if iifname $eif) $(nft_if oifname $eif !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $dport accept"
               fi
             done
           done
@@ -5617,13 +5091,13 @@ setup_firewall_rules()
       echo "$(show_if_ip "$interfaces" "$destips")Forwarding(NAT) IP protocol(s) $(show_hosts_ports "$shosts" "$protos") to $dhost"
 
       IFS=' ,'
-      for shost in `ip_range "$shosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
         for proto in $protos; do
           for destip in $destips; do
             for eif in $interfaces; do
-              ip4tables -t nat -A PREROUTING -i $eif -s $shost -d $destip -p $proto -j DNAT --to-destination $dhost
+              nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $eif) $(nft_addr saddr $shost) $(nft_addr daddr $destip) meta l4proto $proto dnat ip to $dhost"
               if [ -n "$dhost" ]; then
-                ip4tables -A EXT_FORWARD_IN_CHAIN -i $eif ! -o $eif -s $shost -d $dhost -p $proto -j ACCEPT
+                nft_rule EXT_FORWARD_IN_CHAIN "meta nfproto ipv4 ct status dnat $(nft_if iifname $eif) $(nft_if oifname $eif !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
               fi
             done
           done
@@ -5642,27 +5116,27 @@ setup_firewall_rules()
     # Loose the forward chain
     IFS=' ,'
     for eif in $EXT_IF; do
-      iptables -A FORWARD -i $eif ! -o $eif -j ACCEPT
+      nft_rule FORWARD "$(nft_if iifname $eif) $(nft_if oifname $eif !=) accept"
     done
   else
     echo "Security is ENFORCED for external interface(s) in the FORWARD chain"
   fi
 
   # Jump to the post forward chain
-  iptables -A FORWARD -j POST_FORWARD_CHAIN
+  nft_rule FORWARD "jump POST_FORWARD_CHAIN"
 
   # Everything else is logged & dropped in FORWARD
   if [ "$FORWARD_DROP_LOG" != "0" ]; then
     echo " Logging of dropped FORWARD packets enabled"
-    iptables -A FORWARD -m limit --limit 1/m  --limit-burst 3 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Dropped FORWARD packet: "
+    nft_rule FORWARD "limit rate 1/minute burst 3 packets log prefix \"AIF:Dropped FORWARD packet: \" level $LOGLEVEL"
   else
     echo " Logging of dropped FORWARD packets disabled"
   fi
-  iptables -A FORWARD -j DROP
+  nft_rule FORWARD "drop"
 
   # Post/pre routing post chains
-  ip4tables -t nat -A PREROUTING -j POST_NAT_PREROUTING_CHAIN
-  ip4tables -t nat -A POSTROUTING -j POST_NAT_POSTROUTING_CHAIN
+  nft_rule PREROUTING "meta nfproto ipv4 jump POST_NAT_PREROUTING_CHAIN"
+  nft_rule POSTROUTING "meta nfproto ipv4 jump POST_NAT_POSTROUTING_CHAIN"
 
   # Mark outgoing packets for traffic shaping?
   ############################################
@@ -5672,14 +5146,23 @@ setup_firewall_rules()
   #fi
 
   # Jump to the post output chain
-  iptables -A OUTPUT -j POST_OUTPUT_CHAIN
+  nft_rule OUTPUT "jump POST_OUTPUT_CHAIN"
 
   # Everything else is accepted in OUTPUT
-  iptables -A OUTPUT -j ACCEPT
+  nft_rule OUTPUT "accept"
 
-  # Clean-up DNS output rules
-  iptables -D OUTPUT_CHAIN 2
-  iptables -D OUTPUT_CHAIN 1
+  # Load the complete ruleset in one atomic transaction. If it is rejected
+  # the previous ruleset stays active, without one we block the external
+  # interface(s) rather than leaving the machine open.
+  #########################################################################
+  if ! nft_commit; then
+    COMMIT_FAILED=1
+    if ! check_for_base_chains |grep -q "yes"; then
+      printf "\033[40m\033[1;31mERROR: No previous ruleset active, blocking the external interface(s)!\033[0m\n" >&2
+      stop_block_firewall
+    fi
+    return 1
+  fi
 }
 
 
@@ -5721,264 +5204,35 @@ create_user_chains()
 
 
 # Flush our custom chains
-flush_user_chains()
-{
-  # General chains
-  iptables -F HOST_BLOCK_SRC
-  iptables -F HOST_BLOCK_DST
-  iptables -F HOST_BLOCK_SRC_DROP
-  iptables -F HOST_BLOCK_DST_DROP
-  iptables -F VALID_CHK
-  iptables -F RESERVED_NET_CHK
-  iptables -F SPOOF_CHK
-  iptables -F INPUT_CHAIN
-  iptables -F FORWARD_CHAIN
-  iptables -F OUTPUT_CHAIN
-  iptables -F POST_INPUT_DROP_CHAIN
-  iptables -F POST_INPUT_CHAIN
-  iptables -F POST_FORWARD_CHAIN
-  iptables -F POST_OUTPUT_CHAIN
-
-  ip4tables -t nat -F NAT_PREROUTING_CHAIN
-  ip4tables -t nat -F NAT_POSTROUTING_CHAIN
-  ip4tables -t nat -F POST_NAT_PREROUTING_CHAIN
-  ip4tables -t nat -F POST_NAT_POSTROUTING_CHAIN
-
-  if [ "$IPV6_SUPPORT" = "1" ]; then
-    ip6tables -F LINK_LOCAL_DROP
-  fi
-
-  # Interface-2-interface chains
-  iptables -F DMZ_LAN_FORWARD_CHAIN
-  iptables -F INET_DMZ_FORWARD_CHAIN
-  iptables -F DMZ_INET_FORWARD_CHAIN
-  iptables -F LAN_LAN_FORWARD_CHAIN
-  iptables -F LAN_INET_FORWARD_CHAIN
-
-  # Chains for the external interface
-  iptables -F EXT_MULTICAST_CHAIN
-  iptables -F EXT_BROADCAST_CHAIN
-  iptables -F EXT_ICMP_FLOOD_CHAIN
-  iptables -F EXT_INPUT_CHAIN
-  iptables -F EXT_FORWARD_IN_CHAIN
-  iptables -F EXT_FORWARD_OUT_CHAIN
-  iptables -F EXT_OUTPUT_CHAIN
-
-  # INT(LAN) chains
-  iptables -F INT_INPUT_CHAIN
-  iptables -F INT_OUTPUT_CHAIN
-
-  # DMZ chains
-  iptables -F DMZ_INPUT_CHAIN
-  iptables -F DMZ_FORWARD_IN_CHAIN
-  iptables -F DMZ_FORWARD_OUT_CHAIN
-  iptables -F DMZ_OUTPUT_CHAIN
-}
-
-
 stop_firewall()
 {
-  # Set default IPv4 policies
-  ip4tables -P INPUT ACCEPT
-  ip4tables -P FORWARD DROP
-  ip4tables -P OUTPUT ACCEPT
-
-  # Flush builtin IPv4 chains
-  ip4tables -F INPUT
-  ip4tables -F OUTPUT
-  ip4tables -F FORWARD
-
-  # Flush rules in the nat/mangle/raw tables
-  ip4tables -t nat -F
-  ip4tables -t nat -X
-  ip4tables -t mangle -F
-  ip4tables -t mangle -X
-  try_ip4tables -t raw -F
-  try_ip4tables -t raw -X
-
-  # Attempt to flush all IPv4 chains
-  ip4tables -F
-  ip4tables -X
-
-  if [ "$IPV6_DETECTED" = "1" ]; then
-    # Set default IPv6 policies
-    ip6tables -P INPUT ACCEPT
-    ip6tables -P FORWARD DROP
-    ip6tables -P OUTPUT ACCEPT
-
-    # Flush builtin IPv6 chains
-    ip6tables -F INPUT
-    ip6tables -F OUTPUT
-    ip6tables -F FORWARD
-
-    # Flush rules in the nat/mangle/raw tables
-    try_ip6tables -t nat -F
-    try_ip6tables -t nat -X
-    ip6tables -t mangle -F
-    ip6tables -t mangle -X
-    try_ip6tables -t raw -F
-    try_ip6tables -t raw -X
-
-    # Attempt to flush all IPv6 chains
-    ip6tables -F
-    ip6tables -X
-  fi
-}
-
-
-reinit_firewall_chains()
-{
-  echo "Reinitializing firewall chains"
-
-  # Set INDENT for functions
-  INDENT='  '
-
-  # Create chains, just in case
-  create_user_chains 2>/dev/null
-
-  # Flush our user chains
-  flush_user_chains
-
-  # Temporarily set OUTPUT default policy to ACCEPT
-  # Without it, active states will be flushed.
-  iptables -P OUTPUT ACCEPT
-
-  # Flush builtin IPv4 chains
-  ip4tables -F INPUT
-  ip4tables -F OUTPUT
-  ip4tables -F FORWARD
-
-  # Flush builtin IPv4 nat chains
-  ip4tables -t nat -F PREROUTING
-  ip4tables -t nat -F OUTPUT
-  ip4tables -t nat -F POSTROUTING
-
-  # Flush builtin IPv4 mangle chains
-  #   We don't have to be selective by chain since we don't
-  #   expect any external, dynamically managed mangle chains
-  ip4tables -t mangle -F
-
-  # Flush builtin IPv4 raw chains
-  try_ip4tables -t raw -F
-
-  # Flush conntrack helper IPv4 chain, may not exist so "try"
-  try_ip4tables -F CONNTRACK_HELPER
-
-  if [ "$IPV6_DETECTED" = "1" ]; then
-    # Flush builtin IPv6 chains
-    ip6tables -F INPUT
-    ip6tables -F OUTPUT
-    ip6tables -F FORWARD
-
-    # Flush builtin IPv6 nat chains
-    try_ip6tables -t nat -F PREROUTING
-    try_ip6tables -t nat -F OUTPUT
-    try_ip6tables -t nat -F POSTROUTING
-
-    # Flush builtin IPv6 mangle chains
-    #   We don't have to be selective by chain since we don't
-    #   expect any external, dynamically managed mangle chains
-    ip6tables -t mangle -F
-
-    # Flush builtin IPv6 raw chains
-    try_ip6tables -t raw -F
-
-    # Flush conntrack helper IPv6 chain, may not exist so "try"
-    try_ip6tables -F CONNTRACK_HELPER
-  fi
-
-  # Restore our base chains (which weren't flushed so any
-  # running connections should be maintained
-  #######################################################
-  iptables -A INPUT -j BASE_INPUT_CHAIN
-  iptables -A FORWARD -j BASE_FORWARD_CHAIN
-  iptables -A OUTPUT -j BASE_OUTPUT_CHAIN
+  # Replace our ruleset by one that only keeps forwarding disabled,
+  # tables of other applications are left alone
+  nft_begin
+  nft_chain FORWARD "type filter hook forward priority filter; policy drop;"
+  nft_commit
 }
 
 
 stop_block_firewall()
 {
-  # Temporarely set default IPv4 policies to DROP,
-  # to not even have a small window of opportunity
-  ################################################
-  ip4tables -P INPUT DROP
-  ip4tables -P FORWARD DROP
-  ip4tables -P OUTPUT DROP
+  local interface IFS=' ,'
 
-  # Flush builtin IPv4 chains
-  ip4tables -F INPUT
-  ip4tables -F OUTPUT
-  ip4tables -F FORWARD
-
-  # Flush nat/mangle/raw table rules
-  ip4tables -t nat -F
-  ip4tables -t nat -X
-  ip4tables -t mangle -F
-  ip4tables -t mangle -X
-  try_ip4tables -t raw -F
-  try_ip4tables -t raw -X
-
-  # Attempt to flush all IPv4 chains
-  ip4tables -F
-  ip4tables -X
-
-  if [ "$IPV6_DETECTED" = "1" ]; then
-    # Temporarely set default IPv6 policies to DROP,
-    # to not even have a small window of opportunity
-    ################################################
-    ip6tables -P INPUT DROP
-    ip6tables -P FORWARD DROP
-    ip6tables -P OUTPUT DROP
-
-    # Flush builtin IPv6 chains
-    ip6tables -F INPUT
-    ip6tables -F OUTPUT
-    ip6tables -F FORWARD
-
-    # Flush nat/mangle/raw table rules
-    try_ip6tables -t nat -F
-    try_ip6tables -t nat -X
-    ip6tables -t mangle -F
-    ip6tables -t mangle -X
-    try_ip6tables -t raw -F
-    try_ip6tables -t raw -X
-
-    # Attempt to flush all IPv6 chains
-    ip6tables -F
-    ip6tables -X
-  fi
+  # Replace our ruleset in one go, so there is no window of opportunity
+  nft_begin
+  nft_chain INPUT "type filter hook input priority filter; policy accept;"
+  nft_chain FORWARD "type filter hook forward priority filter; policy drop;"
 
   # Deny traffic from our internet interfaces
-  IFS=' ,'
   for interface in $EXT_IF; do
-    ip4tables -A INPUT -i $interface -j DROP
-
-    if [ "$IPV6_DETECTED" = "1" ]; then
-      ip6tables -A INPUT -i $interface -j DROP
-    fi
+    nft_rule INPUT "$(nft_if iifname $interface) drop"
   done
 
-  # Allow IPv4 traffic from the loopback (localhost)
-  ip4tables -A INPUT -i lo -j ACCEPT
-  ip4tables -A FORWARD -i lo -j ACCEPT
-  ip4tables -A OUTPUT -o lo -j ACCEPT
+  # Allow traffic from the loopback (localhost)
+  nft_rule INPUT 'iif lo accept'
+  nft_rule FORWARD 'iif lo accept'
 
-  # Set default IPv4 policies
-  ip4tables -P INPUT ACCEPT
-  ip4tables -P FORWARD DROP
-  ip4tables -P OUTPUT ACCEPT
-
-  if [ "$IPV6_DETECTED" = "1" ]; then
-    # Allow IPv6 traffic from the loopback (localhost)
-    ip6tables -A INPUT -i lo -j ACCEPT
-    ip6tables -A FORWARD -i lo -j ACCEPT
-    ip6tables -A OUTPUT -o lo -j ACCEPT
-
-    # Set default IPv6 policies
-    ip6tables -P INPUT ACCEPT
-    ip6tables -P FORWARD DROP
-    ip6tables -P OUTPUT ACCEPT
-  fi
+  nft_commit
 }
 
 
@@ -5986,21 +5240,12 @@ show_status()
 {
   # Check if the user gave any parameters
   if [ -z "$1" ]; then
-    iptables -xnvL
-
-    if [ "$NAT" = "1" ]; then
-      ip4tables -t nat -xnvL
-    fi
-
-    if [ "$MANGLE_TOS" = "1" ]; then
-      iptables -t mangle -nvL
-    fi
+    $NFT list table inet $NFT_TABLE
 
     # Show plugin status
     plugins_status
   else
-    #iptables -nvL $2 $3 $4 $5
-    iptables -xnvL $@
+    $NFT list chain inet $NFT_TABLE "$@"
   fi
 
   # Show IP->hostname mappings from our host-cache
@@ -6131,7 +5376,7 @@ main_restart()
   load_modules
 #  setup_misc
   setup_kernel_settings
-  reinit_firewall_chains
+  init_firewall_chains
   setup_default_policies
   setup_hostblock_chain
   setup_firewall_rules
@@ -6154,6 +5399,11 @@ start_restart()
     printf "\033[40m\033[1;31m\nWARNING: $PLUGIN_ERRORS Plugin(s) reported errors while starting!\n\033[0m" >&2
   fi
 
+  if [ "$COMMIT_FAILED" = "1" ]; then
+    show_failed
+    exit 1
+  fi
+
   show_applied
 }
 
@@ -6173,7 +5423,7 @@ case "$1" in
                         start_restart;;
   'force-reload' )      sanity_check
                         config_check
-                        setup_hostblock_chain
+                        setup_hostblock_chain reload
                         show_applied;;
   'stop' )              sanity_check
                         show_stop

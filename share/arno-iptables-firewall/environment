@@ -170,21 +170,25 @@ kernel_ver_chk()
 ##
 load_conntrack_helper_module()
 {
-  local helper="$1" proto="$2" dport="$3" do_iptables related
+  local helper="$1" proto="$2" dport="$3" l3proto="inet"
 
   modprobe_multi nf_conntrack_$helper ip_conntrack_$helper
   if [ "$NAT" = "1" ]; then
     modprobe_multi nf_nat_$helper ip_nat_$helper
   fi
 
-  if ip4tables -nL CONNTRACK_HELPER >/dev/null 2>&1; then
-    case $helper in
-       ftp) do_iptables="iptables" ; related="-p $proto --dport 1024:" ;;
-      pptp) do_iptables="ip4tables"; related="" ;;
-         *) do_iptables="iptables" ; related="" ;;
-    esac
-    $do_iptables -A CONNTRACK_HELPER -m conntrack --ctstate RELATED -m helper --helper $helper $related -j ACCEPT
-    $do_iptables -t raw -A PREROUTING -p $proto --dport $dport -j CT --helper $helper
+  if [ "$helper" = "pptp" ]; then
+    l3proto="ip"
+  fi
+
+  # Helpers are always assigned explicitly (automatic assignment is gone since kernel 6.0)
+  nft_cmd "add ct helper inet $NFT_TABLE $helper-helper { type \"$helper\" protocol $proto; l3proto $l3proto; }"
+  nft_rule HELPER_PREROUTING "$proto dport $(echo "$dport" |nft_ports) ct helper set \"$helper-helper\""
+
+  if [ "$helper" = "ftp" ]; then
+    nft_rule CONNTRACK_HELPER "ct state related ct helper \"$helper\" $proto dport 1024-65535 accept"
+  else
+    nft_rule CONNTRACK_HELPER "ct state related ct helper \"$helper\" accept"
   fi
 }
 
@@ -219,14 +223,27 @@ note_iptables_error()
 ################################################################################
 NFT_TABLE="aif"
 
+# Usage: nft_begin [update]
+# Without "update" the batch replaces our whole table, with "update" it only
+# changes the running table (eg. to reload the blocked hosts)
 nft_begin()
 {
   NFT_BATCH="$(mktemp /tmp/aif-nft.XXXXXX)" || return 1
 
   # Create-then-delete clears only our own table, so tables owned by others
   # (docker, libvirt, fail2ban, ...) are left alone
-  printf 'table inet %s\ndelete table inet %s\ntable inet %s\n' \
-    "$NFT_TABLE" "$NFT_TABLE" "$NFT_TABLE" >"$NFT_BATCH"
+  if [ "$1" != "update" ]; then
+    printf 'table inet %s\ndelete table inet %s\ntable inet %s\n' \
+      "$NFT_TABLE" "$NFT_TABLE" "$NFT_TABLE" >"$NFT_BATCH"
+  fi
+}
+
+
+# Usage: nft_cmd "nft command"
+# Adds any other nft command (sets, elements, ct helpers, ...) to the batch
+nft_cmd()
+{
+  printf '%s\n' "$*" >>"$NFT_BATCH"
 }
 
 
@@ -349,8 +366,8 @@ nft_commit()
 
     printf "\033[40m\033[1;31m%s\n\033[0m" "$err_result" >&2
     for line in $bad_lines; do
-      # Only individual rules may be skipped, a broken chain definition is fatal
-      if ! sed -n "${line}p" "$NFT_BATCH" |grep -q '^add rule '; then
+      # Only individual rules/elements may be skipped, a broken chain or set definition is fatal
+      if ! sed -n "${line}p" "$NFT_BATCH" |grep -q -e '^add rule ' -e '^add element '; then
         bad_lines=""
         break
       fi
