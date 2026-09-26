@@ -746,109 +746,86 @@ setup_kernel_settings()
 
 init_firewall_chains()
 {
+  local policy="drop"
+
   echo "Initializing firewall chains"
 
   # Set INDENT for functions
   INDENT='  '
 
-  # Attempt to flush all IPv4 chains
-  ##################################
-  ip4tables -F
-  ip4tables -X
+  # Start a new ruleset, replacing only our own table on commit
+  #############################################################
+  nft_begin
 
-  # Flush builtin IPv4 chains
-  ###########################
-  ip4tables -F INPUT
-  ip4tables -F OUTPUT
-  ip4tables -F FORWARD
-
-  # Flush rules in nat/mangle/raw tables
-  ######################################
-  ip4tables -t nat -F
-  ip4tables -t nat -X
-  ip4tables -t mangle -F
-  ip4tables -t mangle -X
-  try_ip4tables -t raw -F
-  try_ip4tables -t raw -X
-
-  if [ "$IPV6_DETECTED" = "1" ]; then
-    # Attempt to flush all IPv6 chains
-    ##################################
-    ip6tables -F
-    ip6tables -X
-
-    # Flush builtin IPv6 chains
-    ###########################
-    ip6tables -F INPUT
-    ip6tables -F OUTPUT
-    ip6tables -F FORWARD
-
-    # Flush rules in nat/mangle/raw tables
-    ######################################
-    try_ip6tables -t nat -F
-    try_ip6tables -t nat -X
-    ip6tables -t mangle -F
-    ip6tables -t mangle -X
-    try_ip6tables -t raw -F
-    try_ip6tables -t raw -X
+  if [ "$DEFAULT_POLICY_DROP" = "0" ]; then
+    policy="accept"
   fi
 
-  # Create our "base" chains
-  ##########################
-  iptables -N BASE_INPUT_CHAIN
-  iptables -N BASE_FORWARD_CHAIN
-  iptables -N BASE_OUTPUT_CHAIN
+  # Hooked base chains
+  ####################
+  nft_chain INPUT "type filter hook input priority filter; policy $policy;"
+  nft_chain FORWARD "type filter hook forward priority filter; policy $policy;"
+  nft_chain OUTPUT "type filter hook output priority filter; policy $policy;"
+  nft_chain PREROUTING "type nat hook prerouting priority dstnat; policy accept;"
+  nft_chain POSTROUTING "type nat hook postrouting priority srcnat; policy accept;"
+
+  # IPv4 mode: drop all IPv6 except loopback, before anything else sees it
+  #########################################################################
+  if [ "$IPV6_SUPPORT" != "1" ]; then
+    nft_rule INPUT 'meta nfproto ipv6 iif != lo drop'
+    nft_rule FORWARD 'meta nfproto ipv6 iif != lo drop'
+    nft_rule OUTPUT 'meta nfproto ipv6 oif != lo drop'
+  fi
+
+  # Create several chains that we will use later on
+  #################################################
+  create_user_chains
+
+  nft_chain BASE_INPUT_CHAIN
+  nft_chain BASE_FORWARD_CHAIN
+  nft_chain BASE_OUTPUT_CHAIN
 
   # Accept packets of ESTABLISHED connections
   ###########################################
-  iptables -A BASE_INPUT_CHAIN $NF_CONNTRACK_STATE ESTABLISHED -j ACCEPT
-  iptables -A BASE_FORWARD_CHAIN $NF_CONNTRACK_STATE ESTABLISHED -j ACCEPT
-  iptables -A BASE_OUTPUT_CHAIN $NF_CONNTRACK_STATE ESTABLISHED -j ACCEPT
+  nft_rule BASE_INPUT_CHAIN 'ct state established accept'
+  nft_rule BASE_FORWARD_CHAIN 'ct state established accept'
+  nft_rule BASE_OUTPUT_CHAIN 'ct state established accept'
 
   # Accept packets of RELATED connections
   #######################################
-  iptables -A BASE_INPUT_CHAIN $NF_CONNTRACK_STATE RELATED -p icmp -j ACCEPT
-  iptables -A BASE_FORWARD_CHAIN $NF_CONNTRACK_STATE RELATED -p icmp -j ACCEPT
+  nft_rule BASE_INPUT_CHAIN 'ct state related meta l4proto { icmp, ipv6-icmp } accept'
+  nft_rule BASE_FORWARD_CHAIN 'ct state related meta l4proto { icmp, ipv6-icmp } accept'
 
   # Apply conntrack helper chain, fallback to RELATED connections
   ###############################################################
   if kernel_ver_chk 6 0 0 || [ "$(sysctl_get_value net.netfilter.nf_conntrack_helper)" = "0" ]; then
-    iptables -N CONNTRACK_HELPER
-    iptables -A BASE_INPUT_CHAIN -j CONNTRACK_HELPER
-    iptables -A BASE_FORWARD_CHAIN -j CONNTRACK_HELPER
+    nft_chain CONNTRACK_HELPER
+    nft_rule BASE_INPUT_CHAIN 'jump CONNTRACK_HELPER'
+    nft_rule BASE_FORWARD_CHAIN 'jump CONNTRACK_HELPER'
   else
-    iptables -A BASE_INPUT_CHAIN $NF_CONNTRACK_STATE RELATED -p tcp --dport 1024: -j ACCEPT
-    iptables -A BASE_INPUT_CHAIN $NF_CONNTRACK_STATE RELATED -p udp --dport 1024: -j ACCEPT
-    iptables -A BASE_FORWARD_CHAIN $NF_CONNTRACK_STATE RELATED -p tcp --dport 1024: -j ACCEPT
-    iptables -A BASE_FORWARD_CHAIN $NF_CONNTRACK_STATE RELATED -p udp --dport 1024: -j ACCEPT
+    nft_rule BASE_INPUT_CHAIN 'ct state related meta l4proto { tcp, udp } th dport 1024-65535 accept'
+    nft_rule BASE_FORWARD_CHAIN 'ct state related meta l4proto { tcp, udp } th dport 1024-65535 accept'
   fi
 
   # Drop all IPv6 packets with Routing Header Type 0
   ##################################################
   if [ "$IPV6_SUPPORT" = "1" -a "$IPV6_DROP_RH_ZERO" != "0" ]; then
-    if try_ip6tables -A BASE_INPUT_CHAIN -m rt --rt-type 0 -j DROP; then
-      ip6tables -A BASE_FORWARD_CHAIN -m rt --rt-type 0 -j DROP
-      ip6tables -A BASE_OUTPUT_CHAIN -m rt --rt-type 0 -j DROP
-    else
-      echo " WARNING: IPv6 Routing Header Type 0 matching not supported"
-    fi
+    nft_rule BASE_INPUT_CHAIN 'rt type 0 drop'
+    nft_rule BASE_FORWARD_CHAIN 'rt type 0 drop'
+    nft_rule BASE_OUTPUT_CHAIN 'rt type 0 drop'
   fi
 
   # Accept all packets for the loopback device
   ############################################
-  iptables -A BASE_INPUT_CHAIN -i lo -j ACCEPT
-  iptables -A BASE_FORWARD_CHAIN -i lo -j ACCEPT
-  iptables -A BASE_OUTPUT_CHAIN -o lo -j ACCEPT
+  nft_rule BASE_INPUT_CHAIN 'iif lo accept'
+  nft_rule BASE_FORWARD_CHAIN 'iif lo accept'
+  nft_rule BASE_OUTPUT_CHAIN 'oif lo accept'
 
   # Insert our base chains
   ########################
-  iptables -A INPUT -j BASE_INPUT_CHAIN
-  iptables -A FORWARD -j BASE_FORWARD_CHAIN
-  iptables -A OUTPUT -j BASE_OUTPUT_CHAIN
-
-  # Create several chains that we will use later on
-  #################################################
-  create_user_chains
+  nft_rule INPUT 'jump BASE_INPUT_CHAIN'
+  nft_rule FORWARD 'jump BASE_FORWARD_CHAIN'
+  nft_rule OUTPUT 'jump BASE_OUTPUT_CHAIN'
 }
 
 
@@ -892,68 +869,48 @@ check_for_base_chains()
 
 setup_default_policies()
 {
-  # Set the default policies for the builtin INPUT & FORWARD tables. The
-  # default for other chains (eg. OUTPUT) is always set to ACCEPT.
-  #######################################################################
+  # The policies themselves are set on the base chains in
+  # init_firewall_chains(), as nft declares them together with the hook
+  #####################################################################
   if [ "$DEFAULT_POLICY_DROP" != "0" ]; then
-    echo " Setting all default policies to DROP while \"setting up firewall rules\""
-    iptables -P INPUT DROP
-    iptables -P FORWARD DROP
-    iptables -P OUTPUT DROP
+    echo " Setting all default policies to DROP"
   else
-    echo " WARNING: Setting all default policies to ACCEPT while \"setting up firewall rules\""
-    iptables -P INPUT ACCEPT
-    iptables -P FORWARD ACCEPT
-    iptables -P OUTPUT ACCEPT
+    echo " WARNING: Setting all default policies to ACCEPT"
   fi
 
   if [ "$IPV6_SUPPORT" = "1" ]; then
     echo "IPv4/IPv6 mixed mode selected"
   elif [ "$IPV6_DETECTED" = "1" ]; then
     echo "IPv4 mode selected but IPv6 available, DROP all IPv6 packets"
-    ip6tables -P INPUT DROP
-    ip6tables -P FORWARD DROP
-    ip6tables -P OUTPUT DROP
-
-    # Allow IPv6 traffic from the loopback (localhost)
-    ip6tables -A INPUT -i lo -j ACCEPT
-    ip6tables -A FORWARD -i lo -j ACCEPT
-    ip6tables -A OUTPUT -o lo -j ACCEPT
-
-    # DROP all IPv6 traffic
-    ip6tables -A INPUT -j DROP
-    ip6tables -A FORWARD -j DROP
-    ip6tables -A OUTPUT -j DROP
   else
     echo "IPv4 mode selected, no IPv6 available"
   fi
 
-  # The POST_INPUT_DROP_CHAIN should temporarily DROP for now
-  # We'll change this once the rules are in place
-  ###########################################################
-  iptables -A POST_INPUT_DROP_CHAIN -j DROP
+  # The POST_INPUT_DROP_CHAIN should DROP until the rules are in place
+  ####################################################################
+  nft_rule POST_INPUT_DROP_CHAIN 'drop'
 
   # The HOST_BLOCK_SRC_DROP chain should always DROP
-  ###########################################################
+  ##################################################
   if [ "$BLOCKED_HOST_LOG" = "1" -o "$BLOCKED_HOST_LOG" = "2" ]; then
-    iptables -A HOST_BLOCK_SRC_DROP -m limit --limit 1/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Blocked inbound host: "
+    nft_rule HOST_BLOCK_SRC_DROP "limit rate 1/minute burst 1 packets log prefix \"AIF:Blocked inbound host: \" level $LOGLEVEL"
   fi
-  iptables -A HOST_BLOCK_SRC_DROP -j DROP
+  nft_rule HOST_BLOCK_SRC_DROP 'drop'
 
   # The HOST_BLOCK_DST_DROP chain should always DROP
-  ###########################################################
+  ##################################################
   if [ "$BLOCKED_HOST_LOG" = "1" -o "$BLOCKED_HOST_LOG" = "3" ]; then
-    iptables -A HOST_BLOCK_DST_DROP -m limit --limit 1/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Blocked outbound host: "
+    nft_rule HOST_BLOCK_DST_DROP "limit rate 1/minute burst 1 packets log prefix \"AIF:Blocked outbound host: \" level $LOGLEVEL"
   fi
-  iptables -A HOST_BLOCK_DST_DROP -j DROP
+  nft_rule HOST_BLOCK_DST_DROP 'drop'
 
   # The LINK_LOCAL_DROP chain should always DROP
-  ###########################################################
+  ##############################################
   if [ "$IPV6_SUPPORT" = "1" ]; then
     if [ "$LINK_LOCAL_DROP_LOG" != "0" ]; then
-      ip6tables -A LINK_LOCAL_DROP -m limit --limit 1/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Dropped Link-Local: "
+      nft_rule LINK_LOCAL_DROP "limit rate 1/minute burst 1 packets log prefix \"AIF:Dropped Link-Local: \" level $LOGLEVEL"
     fi
-    ip6tables -A LINK_LOCAL_DROP -j DROP
+    nft_rule LINK_LOCAL_DROP 'drop'
   fi
 }
 
@@ -970,39 +927,31 @@ setup_valid_chk_chain()
 
     # (NMAP) FIN/URG/PSH
     ####################
-    iptables -A VALID_CHK -p tcp --tcp-flags ALL FIN,URG,PSH \
-      -m limit --limit 3/m --limit-burst 5 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Stealth XMAS scan: "
+    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin|psh|urg limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth XMAS scan: \" level $LOGLEVEL"
 
     # SYN/RST/ACK/FIN/URG
     #####################
-    iptables -A VALID_CHK -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG \
-      -m limit --limit 3/m --limit-burst 5 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Stealth XMAS-PSH scan: "
+    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin|syn|rst|ack|urg limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth XMAS-PSH scan: \" level $LOGLEVEL"
 
     # ALL/ALL
     #########
-    iptables -A VALID_CHK -p tcp --tcp-flags ALL ALL \
-      -m limit --limit 3/m --limit-burst 5 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Stealth XMAS-ALL scan: "
+    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin|syn|rst|psh|ack|urg limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth XMAS-ALL scan: \" level $LOGLEVEL"
 
     # NMAP FIN Stealth
     ##################
-    iptables -A VALID_CHK -p tcp --tcp-flags ALL FIN \
-      -m limit --limit 3/m --limit-burst 5 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Stealth FIN scan: "
+    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth FIN scan: \" level $LOGLEVEL"
 
     # SYN/RST
     #########
-    iptables -A VALID_CHK -p tcp --tcp-flags SYN,RST SYN,RST \
-      -m limit --limit 3/m --limit-burst 5 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Stealth SYN/RST scan: "
+    nft_rule VALID_CHK "tcp flags & (syn|rst) == syn|rst limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth SYN/RST scan: \" level $LOGLEVEL"
 
     # SYN/FIN (probably)
     ####################
-    iptables -A VALID_CHK -p tcp --tcp-flags SYN,FIN SYN,FIN \
-      -m limit --limit 3/m --limit-burst 5 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Stealth SYN/FIN scan?: "
+    nft_rule VALID_CHK "tcp flags & (syn|fin) == syn|fin limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth SYN/FIN scan?: \" level $LOGLEVEL"
 
     # Null scan
     ###########
-    iptables -A VALID_CHK -p tcp --tcp-flags ALL NONE \
-      -m limit --limit 3/m --limit-burst 5 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Stealth Null scan: "
-
+    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == 0x0 limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth Null scan: \" level $LOGLEVEL"
   else
     echo "Logging of stealth scans (nmap probes etc.) disabled"
   fi
@@ -1010,63 +959,47 @@ setup_valid_chk_chain()
   # Drop (NMAP) scan packets:
   ###########################
 
-  # NMAP FIN/URG/PSH
-  ##################
-  iptables -A VALID_CHK -p tcp --tcp-flags ALL FIN,URG,PSH -j POST_INPUT_DROP_CHAIN
+  # (NMAP) FIN/URG/PSH
+  ####################
+  nft_rule VALID_CHK 'tcp flags & (fin|syn|rst|psh|ack|urg) == fin|psh|urg jump POST_INPUT_DROP_CHAIN'
 
   # SYN/RST/ACK/FIN/URG
   #####################
-  iptables -A VALID_CHK -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j POST_INPUT_DROP_CHAIN
+  nft_rule VALID_CHK 'tcp flags & (fin|syn|rst|psh|ack|urg) == fin|syn|rst|ack|urg jump POST_INPUT_DROP_CHAIN'
 
-  # ALL/ALL Scan
-  ##############
-  iptables -A VALID_CHK -p tcp --tcp-flags ALL ALL -j POST_INPUT_DROP_CHAIN
+  # ALL/ALL
+  #########
+  nft_rule VALID_CHK 'tcp flags & (fin|syn|rst|psh|ack|urg) == fin|syn|rst|psh|ack|urg jump POST_INPUT_DROP_CHAIN'
 
   # NMAP FIN Stealth
   ##################
-  iptables -A VALID_CHK -p tcp --tcp-flags ALL FIN -j POST_INPUT_DROP_CHAIN
+  nft_rule VALID_CHK 'tcp flags & (fin|syn|rst|psh|ack|urg) == fin jump POST_INPUT_DROP_CHAIN'
 
   # SYN/RST
   #########
-  iptables -A VALID_CHK -p tcp --tcp-flags SYN,RST SYN,RST -j POST_INPUT_DROP_CHAIN
+  nft_rule VALID_CHK 'tcp flags & (syn|rst) == syn|rst jump POST_INPUT_DROP_CHAIN'
 
-  # SYN/FIN -- Scan(probably)
-  ###########################
-  iptables -A VALID_CHK -p tcp --tcp-flags SYN,FIN SYN,FIN -j POST_INPUT_DROP_CHAIN
+  # SYN/FIN (probably)
+  ####################
+  nft_rule VALID_CHK 'tcp flags & (syn|fin) == syn|fin jump POST_INPUT_DROP_CHAIN'
 
-  # NMAP Null Scan
-  ################
-  iptables -A VALID_CHK -p tcp --tcp-flags ALL NONE -j POST_INPUT_DROP_CHAIN
-
-  # These packets are normally from "lost connection" and thus can generate false alarms
-  # So we might want to ignore such packets
-  ######################################################################################
-#  if [ "$LOST_CONNECTION_LOG" != "1" ]; then
-#    iptables -A VALID_CHK -p tcp --tcp-flags SYN,ACK,FIN,RST ACK -j POST_INPUT_DROP_CHAIN
-#    iptables -A VALID_CHK -p tcp --tcp-flags SYN,ACK,FIN,RST FIN -j POST_INPUT_DROP_CHAIN
-#    iptables -A VALID_CHK -p tcp --tcp-flags SYN,ACK,FIN,RST RST -j POST_INPUT_DROP_CHAIN
-#    iptables -A VALID_CHK -p tcp --tcp-flags SYN,ACK,FIN,RST ACK,FIN -j POST_INPUT_DROP_CHAIN
-#    iptables -A VALID_CHK -p tcp --tcp-flags SYN,ACK,FIN,RST ACK,RST -j POST_INPUT_DROP_CHAIN
-#    iptables -A VALID_CHK -p tcp --tcp-flags SYN,ACK,FIN,RST SYN,ACK -j POST_INPUT_DROP_CHAIN
-#  fi
+  # Null scan
+  ###########
+  nft_rule VALID_CHK 'tcp flags & (fin|syn|rst|psh|ack|urg) == 0x0 jump POST_INPUT_DROP_CHAIN'
 
   # Here we add some protection from random packets we receive, such as random sweeps from other
   # (possible) hacked computers, or just packets who are invalid, not belonging to ANY connection
   ###############################################################################################
   if [ "$INVALID_TCP_LOG" = "1" ]; then
     echo "Logging of INVALID TCP packets enabled"
-
-    iptables -A VALID_CHK -p tcp $NF_CONNTRACK_STATE INVALID \
-      -m limit --limit 1/m --limit-burst 2 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:INVALID TCP: "
+    nft_rule VALID_CHK "meta l4proto tcp ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID TCP: \" level $LOGLEVEL"
   else
     echo "Logging of INVALID TCP packets disabled"
   fi
 
   if [ "$INVALID_UDP_LOG" = "1" ]; then
     echo "Logging of INVALID UDP packets enabled"
-
-    iptables -A VALID_CHK -p udp $NF_CONNTRACK_STATE INVALID \
-      -m limit --limit 1/m --limit-burst 2 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:INVALID UDP: "
+    nft_rule VALID_CHK "meta l4proto udp ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID UDP: \" level $LOGLEVEL"
   else
     echo "Logging of INVALID UDP packets disabled"
   fi
@@ -1076,14 +1009,14 @@ setup_valid_chk_chain()
 
     # Only log INVALID ICMP-request packets when we also want to log "normal" ICMP-request packets
     if [ "$ICMP_REQUEST_LOG" != "0" ]; then
-      iptables -A VALID_CHK -p icmp --icmp-type echo-request $NF_CONNTRACK_STATE INVALID \
-        -m limit --limit 1/m --limit-burst 2 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:INVALID ICMP-request: "
+      nft_rule VALID_CHK "icmp type echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID ICMP-request: \" level $LOGLEVEL"
+      nft_rule VALID_CHK "icmpv6 type echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID ICMP-request: \" level $LOGLEVEL"
     fi
 
     # Only log INVALID ICMP-other when enabled in the config
     if [ "$ICMP_OTHER_LOG" != "0" ]; then
-      iptables -A VALID_CHK -p icmp ! --icmp-type echo-request $NF_CONNTRACK_STATE INVALID \
-        -m limit --limit 1/m --limit-burst 2 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:INVALID ICMP-other: "
+      nft_rule VALID_CHK "icmp type != echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID ICMP-other: \" level $LOGLEVEL"
+      nft_rule VALID_CHK "icmpv6 type != echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID ICMP-other: \" level $LOGLEVEL"
     fi
   else
     echo "Logging of INVALID ICMP packets disabled"
@@ -1091,15 +1024,15 @@ setup_valid_chk_chain()
 
   # Drop invalid packets
   ######################
-  iptables -A VALID_CHK $NF_CONNTRACK_STATE INVALID -j POST_INPUT_DROP_CHAIN
+  nft_rule VALID_CHK 'ct state invalid jump POST_INPUT_DROP_CHAIN'
 
   # Fragmented packets handling
-  # NOTE: Fragmentation cannot happen with IPv6 (and probably even not with iptables/IPv4)
+  # NOTE: Fragmentation cannot happen with IPv6 (and probably even not with nftables/IPv4)
   ########################################################################################
   if [ "$FRAG_DROP" = "1" ]; then
     echo "Dropping and logging of IPv4 fragmented packets enabled"
-    ip4tables -A VALID_CHK -f -m limit --limit 3/m --limit-burst 1 -j LOG --log-prefix "AIF:Fragment packet: "
-    ip4tables -A VALID_CHK -f -j DROP
+    nft_rule VALID_CHK 'ip frag-off & 0x1fff != 0 limit rate 3/minute burst 1 packets log prefix "AIF:Fragment packet: "'
+    nft_rule VALID_CHK 'ip frag-off & 0x1fff != 0 drop'
   else
     echo "Dropping and logging of IPv4 fragmented packets disabled"
   fi
@@ -5849,55 +5782,37 @@ setup_firewall_rules()
 # Create our custom chains
 create_user_chains()
 {
+  local chain IFS=' '
+
   # General chains
-  iptables -N HOST_BLOCK_SRC
-  iptables -N HOST_BLOCK_DST
-  iptables -N HOST_BLOCK_SRC_DROP
-  iptables -N HOST_BLOCK_DST_DROP
-  iptables -N VALID_CHK
-  iptables -N RESERVED_NET_CHK
-  iptables -N SPOOF_CHK
-  iptables -N INPUT_CHAIN
-  iptables -N FORWARD_CHAIN
-  iptables -N OUTPUT_CHAIN
-  ip4tables -t nat -N NAT_PREROUTING_CHAIN
-  ip4tables -t nat -N NAT_POSTROUTING_CHAIN
-  iptables -N POST_INPUT_DROP_CHAIN
-  iptables -N POST_INPUT_CHAIN
-  iptables -N POST_FORWARD_CHAIN
-  iptables -N POST_OUTPUT_CHAIN
-  ip4tables -t nat -N POST_NAT_PREROUTING_CHAIN
-  ip4tables -t nat -N POST_NAT_POSTROUTING_CHAIN
+  for chain in HOST_BLOCK_SRC HOST_BLOCK_DST HOST_BLOCK_SRC_DROP HOST_BLOCK_DST_DROP \
+               VALID_CHK RESERVED_NET_CHK SPOOF_CHK INPUT_CHAIN FORWARD_CHAIN OUTPUT_CHAIN \
+               NAT_PREROUTING_CHAIN NAT_POSTROUTING_CHAIN POST_INPUT_DROP_CHAIN POST_INPUT_CHAIN \
+               POST_FORWARD_CHAIN POST_OUTPUT_CHAIN POST_NAT_PREROUTING_CHAIN POST_NAT_POSTROUTING_CHAIN; do
+    nft_chain $chain
+  done
 
   if [ "$IPV6_SUPPORT" = "1" ]; then
-    ip6tables -N LINK_LOCAL_DROP
+    nft_chain LINK_LOCAL_DROP
   fi
 
   # Interface-2-interface chains
-  iptables -N DMZ_LAN_FORWARD_CHAIN
-  iptables -N INET_DMZ_FORWARD_CHAIN
-  iptables -N DMZ_INET_FORWARD_CHAIN
-  iptables -N LAN_LAN_FORWARD_CHAIN
-  iptables -N LAN_INET_FORWARD_CHAIN
+  for chain in DMZ_LAN_FORWARD_CHAIN INET_DMZ_FORWARD_CHAIN DMZ_INET_FORWARD_CHAIN \
+               LAN_LAN_FORWARD_CHAIN LAN_INET_FORWARD_CHAIN; do
+    nft_chain $chain
+  done
 
   # Chains for the external interface
-  iptables -N EXT_MULTICAST_CHAIN
-  iptables -N EXT_BROADCAST_CHAIN
-  iptables -N EXT_ICMP_FLOOD_CHAIN
-  iptables -N EXT_INPUT_CHAIN
-  iptables -N EXT_FORWARD_IN_CHAIN
-  iptables -N EXT_FORWARD_OUT_CHAIN
-  iptables -N EXT_OUTPUT_CHAIN
+  for chain in EXT_MULTICAST_CHAIN EXT_BROADCAST_CHAIN EXT_ICMP_FLOOD_CHAIN EXT_INPUT_CHAIN \
+               EXT_FORWARD_IN_CHAIN EXT_FORWARD_OUT_CHAIN EXT_OUTPUT_CHAIN; do
+    nft_chain $chain
+  done
 
-  # INT(LAN) chains
-  iptables -N INT_INPUT_CHAIN
-  iptables -N INT_OUTPUT_CHAIN
-
-  # DMZ chains
-  iptables -N DMZ_INPUT_CHAIN
-  iptables -N DMZ_FORWARD_IN_CHAIN
-  iptables -N DMZ_FORWARD_OUT_CHAIN
-  iptables -N DMZ_OUTPUT_CHAIN
+  # INT(LAN) and DMZ chains
+  for chain in INT_INPUT_CHAIN INT_OUTPUT_CHAIN \
+               DMZ_INPUT_CHAIN DMZ_FORWARD_IN_CHAIN DMZ_FORWARD_OUT_CHAIN DMZ_OUTPUT_CHAIN; do
+    nft_chain $chain
+  done
 }
 
 

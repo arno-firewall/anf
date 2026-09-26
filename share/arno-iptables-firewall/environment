@@ -210,6 +210,65 @@ note_iptables_error()
 }
 
 
+################################################################################
+# nftables ruleset construction
+#
+# All chains and rules are collected in $NFT_BATCH and loaded by nft_commit in
+# one atomic transaction. If nft rejects anything, nothing is applied and the
+# previously active ruleset stays in place.
+################################################################################
+NFT_TABLE="aif"
+
+nft_begin()
+{
+  NFT_BATCH="$(mktemp /tmp/aif-nft.XXXXXX)" || return 1
+
+  # Create-then-delete clears only our own table, so tables owned by others
+  # (docker, libvirt, fail2ban, ...) are left alone
+  printf 'table inet %s\ndelete table inet %s\ntable inet %s\n' \
+    "$NFT_TABLE" "$NFT_TABLE" "$NFT_TABLE" >"$NFT_BATCH"
+}
+
+
+# Usage: nft_chain NAME ["base chain spec"]
+nft_chain()
+{
+  if [ -n "$2" ]; then
+    printf 'add chain inet %s %s { %s }\n' "$NFT_TABLE" "$1" "$2" >>"$NFT_BATCH"
+  else
+    printf 'add chain inet %s %s\n' "$NFT_TABLE" "$1" >>"$NFT_BATCH"
+  fi
+}
+
+
+# Usage: nft_rule CHAIN rule...
+nft_rule()
+{
+  local chain="$1"
+
+  shift
+  printf 'add rule inet %s %s %s\n' "$NFT_TABLE" "$chain" "$*" >>"$NFT_BATCH"
+}
+
+
+nft_commit()
+{
+  local err_result retval
+
+  err_result="$($NFT -f "$NFT_BATCH" 2>&1)"
+  retval=$?
+
+  if [ $retval -ne 0 ]; then
+    printf "\033[40m\033[1;31mERROR: nft rejected the ruleset, previous ruleset left in place:\n%s\n\033[0m" "$err_result" >&2
+    echo "Rejected ruleset kept as $NFT_BATCH" >&2
+  else
+    rm -f "$NFT_BATCH"
+  fi
+
+  return $retval
+}
+
+
 ip6tables_icmp_args()
 {
   local arg args="" action="" tilde="~" IFS
@@ -2062,6 +2121,10 @@ fi
 
 if [ -z "$IP4TABLES" ]; then
   IP4TABLES="$(find_command /sbin/iptables /usr/sbin/iptables)"
+fi
+
+if [ -z "$NFT" ]; then
+  NFT="$(find_command /sbin/nft /usr/sbin/nft)"
 fi
 if [ -n "$IP4TABLES" ]; then
   IP4TABLES_SAVE="$(find_command "$IP4TABLES"-save)"
