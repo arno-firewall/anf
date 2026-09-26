@@ -28,7 +28,7 @@
 
 # Some predefined variables/macros:
 ANYHOST="0/0"
-ANYPORT="0:65535"
+ANYPORT="0-65535"
 SEP="~"
 SEP2="#"
 SEP3="|"
@@ -244,16 +244,123 @@ nft_chain()
 # Usage: nft_rule CHAIN rule...
 nft_rule()
 {
-  local chain="$1"
+  local chain="$1" rule
 
   shift
-  printf 'add rule inet %s %s %s\n' "$NFT_TABLE" "$chain" "$*" >>"$NFT_BATCH"
+
+  rule="$*"
+
+  # A configured protocol "icmp" means the ICMP version matching the
+  # addresses, or both without addresses, as the old ip6tables wrapper did
+  case " $rule " in
+    *" meta l4proto icmp "*)
+      case " $rule " in
+        *" ip6 "[sd]"addr "*) rule="$(echo "$rule" |sed -e 's/meta l4proto icmp /meta l4proto ipv6-icmp /')" ;;
+        *" ip "[sd]"addr "*)  ;;
+        *) rule="$(echo "$rule" |sed -e 's/meta l4proto icmp /meta l4proto { icmp, ipv6-icmp } /')" ;;
+      esac
+      ;;
+  esac
+
+  # Mixed IPv4/IPv6 addresses or ICMP versions can never match, skip them
+  case " $rule " in
+    *" ip saddr "*" ip6 daddr "*|*" ip6 saddr "*" ip daddr "*) return 0 ;;
+    *" ip "[sd]"addr "*" icmpv6 type "*|*" ip6 "[sd]"addr "*" icmp type "*) return 0 ;;
+  esac
+
+  printf 'add rule inet %s %s %s\n' "$NFT_TABLE" "$chain" "$rule" >>"$NFT_BATCH"
+}
+
+
+# Usage: nft_addr saddr|daddr HOST ["!="]
+# Prints the match for HOST with the right address family, nothing for any host
+nft_addr()
+{
+  case $2 in
+    0/0|"") ;;
+    *:*) echo "ip6 $1 $3${3:+ }$2" ;;
+    *)   echo "ip $1 $3${3:+ }$2" ;;
+  esac
+}
+
+
+# Usage: nft_if iifname|oifname IF ["!="]
+# Prints the interface match, translating the iptables '+' wildcard to '*'
+nft_if()
+{
+  case $2 in
+    +|"") ;;
+    *+) echo "$1 $3${3:+ }\"${2%+}*\"" ;;
+    *)  echo "$1 $3${3:+ }\"$2\"" ;;
+  esac
+}
+
+
+# Usage: nft_hosts HOSTS
+# Replaces ip_range() with the same comma separated output: expands w.x.y.z1-z2 to a native nft range and resolves
+# hostnames (both A and AAAA with IPv6 enabled), as iptables used to
+nft_hosts()
+{
+  local item addrs result="" IFS=' ,'
+
+  for item in $*; do
+    case $item in
+      0/0|*:*|*.*.*.*-*.*.*.*|*/*)
+        ;;
+      *.*.*.*-*)
+        item="$item-${item%.*}.${item##*-}"
+        item="${item%%-*}-${item##*-}"
+        ;;
+      *[!0-9.]*)
+        if ! addrs="$(gethostbyname "$item")" || [ -z "$addrs" ]; then
+          echo "** WARNING: Unable to resolve host \"$item\", skipped **" >&2
+          continue
+        fi
+        item="$(echo $addrs |tr ' ' ',')"
+        ;;
+    esac
+    result="$result${result:+,}$item"
+  done
+
+  echo "$result"
+}
+
+
+# Usage: nft_ports PORTS
+# Converts iptables style port ranges (a:b, :b, a:) to nft (a-b)
+nft_ports()
+{
+  sed -r -e 's/:/-/g' -e 's/-([ ,]|$)/-65535\1/g' -e 's/(^|[ ,])-/\10-/g'
 }
 
 
 nft_commit()
 {
-  local err_result retval
+  local err_result retval bad_lines line pass=0 IFS=" "
+
+  # Like the old per-rule iptables calls, a rejected rule is reported and
+  # skipped while everything else is loaded. The load itself stays atomic.
+  while err_result="$($NFT -c -f "$NFT_BATCH" 2>&1)"; [ -n "$err_result" ] && [ $pass -lt 20 ]; do
+    pass=$((pass + 1))
+    bad_lines="$(echo "$err_result" |sed -n -r -e "s!^$NFT_BATCH:([0-9]+):.*!\1!p" |sort -un |tr '\n' ' ')"
+    if [ -z "$bad_lines" ]; then
+      break
+    fi
+
+    printf "\033[40m\033[1;31m%s\n\033[0m" "$err_result" >&2
+    for line in $bad_lines; do
+      # Only individual rules may be skipped, a broken chain definition is fatal
+      if ! sed -n "${line}p" "$NFT_BATCH" |grep -q '^add rule '; then
+        bad_lines=""
+        break
+      fi
+      RULE_WARNING=$((RULE_WARNING + 1))
+    done
+    if [ -z "$bad_lines" ]; then
+      break
+    fi
+    awk -v bad=" $bad_lines" 'index(bad, " " NR " ") == 0' "$NFT_BATCH" >"$NFT_BATCH.new" && mv "$NFT_BATCH.new" "$NFT_BATCH"
+  done
 
   err_result="$($NFT -f "$NFT_BATCH" 2>&1)"
   retval=$?
@@ -1242,7 +1349,7 @@ get_ports_ihp()
   local result="$(echo "$1" |sed "s!^.*$SEP2!!")"
 
   if echo "$result" |grep -q -e "$SEP"; then
-    echo "$result" |cut -s -d"$SEP" -f2 |tr '-' ':'
+    echo "$result" |cut -s -d"$SEP" -f2 |nft_ports
     return 0
   elif [ -n "$2" ]; then
     # Use default, if specified
@@ -1250,7 +1357,7 @@ get_ports_ihp()
     return 1
   else
     # When we have no separator, assume port(s) only and no host(s)
-    echo "$result" |tr '-' ':'
+    echo "$result" |nft_ports
     return 0
   fi
 }
@@ -1282,7 +1389,7 @@ get_ports_hp()
   local result="$(echo "$1" |sed "s!^.*$SEP2!!")"
 
   if echo "$result" |grep -q -e "$SEP"; then
-    echo "$result" |cut -s -d"$SEP" -f2 |tr '-' ':'
+    echo "$result" |cut -s -d"$SEP" -f2 |nft_ports
     return 0
   else
     echo "$2"
@@ -1297,7 +1404,7 @@ get_ports_ip()
   local result="$(echo "$1" |sed "s!^.*$SEP2!!")"
 
   if [ -n "$result" ]; then
-    echo "$result" |tr '-' ':'
+    echo "$result" |nft_ports
     return 0
   else
     echo "$2"

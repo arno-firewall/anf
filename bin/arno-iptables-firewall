@@ -1048,28 +1048,21 @@ setup_reserved_net_chk_chain()
   ####################################
   if [ "$RESERVED_NET_LOG" = "1" ]; then
     echo "Logging of access from reserved nets enabled"
-    ip4tables -A RESERVED_NET_CHK -s 10.0.0.0/8 \
-      -m limit --limit 1/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:IPv4 Private address: "
+    nft_rule RESERVED_NET_CHK "ip saddr 10.0.0.0/8 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Private address: \" level $LOGLEVEL"
 
-    ip4tables -A RESERVED_NET_CHK -s 172.16.0.0/12 \
-      -m limit --limit 1/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:IPv4 Private address: "
+    nft_rule RESERVED_NET_CHK "ip saddr 172.16.0.0/12 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Private address: \" level $LOGLEVEL"
 
-    ip4tables -A RESERVED_NET_CHK -s 192.168.0.0/16 \
-      -m limit --limit 1/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:IPv4 Private address: "
+    nft_rule RESERVED_NET_CHK "ip saddr 192.168.0.0/16 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Private address: \" level $LOGLEVEL"
 
-    ip4tables -A RESERVED_NET_CHK -s 169.254.0.0/16 \
-      -m limit --limit 1/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:IPv4 Link-local address: "
+    nft_rule RESERVED_NET_CHK "ip saddr 169.254.0.0/16 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Link-local address: \" level $LOGLEVEL"
 
-    ip4tables -A RESERVED_NET_CHK -s 224.0.0.0/24 \
-      -m limit --limit 1/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:IPv4 Multicast address: "
+    nft_rule RESERVED_NET_CHK "ip saddr 224.0.0.0/24 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Multicast address: \" level $LOGLEVEL"
 
-    ip4tables -A RESERVED_NET_CHK -s 239.0.0.0/24 \
-      -m limit --limit 1/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:IPv4 Multicast address: "
+    nft_rule RESERVED_NET_CHK "ip saddr 239.0.0.0/24 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Multicast address: \" level $LOGLEVEL"
 
     if [ "$IPV6_SUPPORT" = "1" ]; then
       # IPv6 not 2000::/3 is non-Global Unicast
-      ip6tables -A RESERVED_NET_CHK ! -s 2000::/3 \
-        -m limit --limit 1/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:IPv6 non-Global address: "
+      nft_rule RESERVED_NET_CHK "ip6 saddr != 2000::/3 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv6 non-Global address: \" level $LOGLEVEL"
     fi
   else
     echo "Logging of access from reserved nets disabled"
@@ -1079,16 +1072,16 @@ setup_reserved_net_chk_chain()
     # rp_filter drops some of these addresses, but just to be sure :)
     ################################################################
     #echo "Denying access from reserved addresses..."
-    ip4tables -A RESERVED_NET_CHK -s 10.0.0.0/8 -j POST_INPUT_DROP_CHAIN
-    ip4tables -A RESERVED_NET_CHK -s 172.16.0.0/12 -j POST_INPUT_DROP_CHAIN
-    ip4tables -A RESERVED_NET_CHK -s 192.168.0.0/16 -j POST_INPUT_DROP_CHAIN
-    ip4tables -A RESERVED_NET_CHK -s 169.254.0.0/16 -j POST_INPUT_DROP_CHAIN
-    ip4tables -A RESERVED_NET_CHK -s 224.0.0.0/24 -j POST_INPUT_DROP_CHAIN
-    ip4tables -A RESERVED_NET_CHK -s 239.0.0.0/24 -j POST_INPUT_DROP_CHAIN
+    nft_rule RESERVED_NET_CHK "ip saddr 10.0.0.0/8 jump POST_INPUT_DROP_CHAIN"
+    nft_rule RESERVED_NET_CHK "ip saddr 172.16.0.0/12 jump POST_INPUT_DROP_CHAIN"
+    nft_rule RESERVED_NET_CHK "ip saddr 192.168.0.0/16 jump POST_INPUT_DROP_CHAIN"
+    nft_rule RESERVED_NET_CHK "ip saddr 169.254.0.0/16 jump POST_INPUT_DROP_CHAIN"
+    nft_rule RESERVED_NET_CHK "ip saddr 224.0.0.0/24 jump POST_INPUT_DROP_CHAIN"
+    nft_rule RESERVED_NET_CHK "ip saddr 239.0.0.0/24 jump POST_INPUT_DROP_CHAIN"
 
     if [ "$IPV6_SUPPORT" = "1" ]; then
       # IPv6 not 2000::/3 is non-Global Unicast
-      ip6tables -A RESERVED_NET_CHK ! -s 2000::/3 -j POST_INPUT_DROP_CHAIN
+      nft_rule RESERVED_NET_CHK "ip6 saddr != 2000::/3 jump POST_INPUT_DROP_CHAIN"
     fi
   fi
 }
@@ -1108,10 +1101,10 @@ setup_spoof_chk_chain()
         printf "$net "
         for interface in $INT_IF; do
           # Any internal net is valid
-          iptables -A SPOOF_CHK -i $interface -s $net -j RETURN
+          nft_rule SPOOF_CHK "$(nft_if iifname $interface) $(nft_addr saddr $net) return"
         done
-        iptables -A SPOOF_CHK -s $net -m limit --limit 3/m -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Spoofed packet: "
-        iptables -A SPOOF_CHK -s $net -j POST_INPUT_DROP_CHAIN
+        nft_rule SPOOF_CHK "$(nft_addr saddr $net) limit rate 3/minute burst 5 packets log prefix \"AIF:Spoofed packet: \" level $LOGLEVEL"
+        nft_rule SPOOF_CHK "$(nft_addr saddr $net) jump POST_INPUT_DROP_CHAIN"
       done
       echo ""
     else
@@ -1128,10 +1121,10 @@ setup_spoof_chk_chain()
         printf "$net "
         for interface in $DMZ_IF; do
           # Any dmz net is valid
-          iptables -A SPOOF_CHK -i $interface -s $net -j RETURN
+          nft_rule SPOOF_CHK "$(nft_if iifname $interface) $(nft_addr saddr $net) return"
         done
-        iptables -A SPOOF_CHK -s $net -m limit --limit 3/m -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Spoofed packet: "
-        iptables -A SPOOF_CHK -s $net -j POST_INPUT_DROP_CHAIN
+        nft_rule SPOOF_CHK "$(nft_addr saddr $net) limit rate 3/minute burst 5 packets log prefix \"AIF:Spoofed packet: \" level $LOGLEVEL"
+        nft_rule SPOOF_CHK "$(nft_addr saddr $net) jump POST_INPUT_DROP_CHAIN"
       done
       echo ""
     else
@@ -1140,7 +1133,7 @@ setup_spoof_chk_chain()
   fi
 
   # Everything else is valid
-  iptables -A SPOOF_CHK -j RETURN
+  nft_rule SPOOF_CHK "return"
 }
 
 
@@ -1158,11 +1151,11 @@ setup_inet_forward_rules()
       echo "$(show_if_ip "$interfaces")Forwarding(non-NAT) TCP port(s): $ports from $shosts(INET) to $dhosts"
 
       IFS=' ,'
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
-              iptables -A EXT_FORWARD_IN_CHAIN -i $interface ! -o $interface -s $shost -d $dhost -p tcp --dport $port -j ACCEPT
+              nft_rule EXT_FORWARD_IN_CHAIN "$(nft_if iifname $interface) $(nft_if oifname $interface !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
             done
           done
         done
@@ -1179,11 +1172,11 @@ setup_inet_forward_rules()
       echo "$(show_if_ip "$interfaces")Forwarding(non-NAT) UDP port(s): $ports from $shosts(INET) to $dhosts"
 
       IFS=' ,'
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
-              iptables -A EXT_FORWARD_IN_CHAIN -i $interface ! -o $interface -s $shost -d $dhost -p udp --dport $port -j ACCEPT
+              nft_rule EXT_FORWARD_IN_CHAIN "$(nft_if iifname $interface) $(nft_if oifname $interface !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
             done
           done
         done
@@ -1200,11 +1193,11 @@ setup_inet_forward_rules()
       echo "$(show_if_ip "$interfaces")Forwarding(non-NAT) IP protocol(s): $protos from $shosts(INET) to $dhosts"
 
       IFS=' ,'
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for proto in $protos; do
             for interface in $interfaces; do
-              iptables -A EXT_FORWARD_IN_CHAIN -i $interface ! -o $interface -s $shost -d $dhost -p $proto -j ACCEPT
+              nft_rule EXT_FORWARD_IN_CHAIN "$(nft_if iifname $interface) $(nft_if oifname $interface !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
             done
           done
         done
@@ -1228,9 +1221,9 @@ setup_dmz_input_chain()
       echo " Allowing $hosts(DMZ) for TCP port(s): $ports"
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for port in $ports; do
-          iptables -A DMZ_INPUT_CHAIN -s $host -p tcp --dport $port -j ACCEPT
+          nft_rule DMZ_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport $port accept"
         done
       done
     fi
@@ -1245,9 +1238,9 @@ setup_dmz_input_chain()
       echo " Allowing $hosts(DMZ) for UDP port(s): $ports"
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for port in $ports; do
-          iptables -A DMZ_INPUT_CHAIN -s $host -p udp --dport $port -j ACCEPT
+          nft_rule DMZ_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port accept"
         done
       done
     fi
@@ -1262,9 +1255,9 @@ setup_dmz_input_chain()
       echo " Allowing $hosts(DMZ) for IP protocol(s): $protos"
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for proto in $protos; do
-          iptables -A DMZ_INPUT_CHAIN -s $host -p $proto -j ACCEPT
+          nft_rule DMZ_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto accept"
         done
       done
     fi
@@ -1275,8 +1268,8 @@ setup_dmz_input_chain()
   if [ -n "$DMZ_OPEN_TCP" ]; then
     echo " Allowing TCP port(s): $DMZ_OPEN_TCP"
     IFS=' ,'
-    for port in $DMZ_OPEN_TCP; do
-      iptables -A DMZ_INPUT_CHAIN -p tcp --dport $port -j ACCEPT
+    for port in $(echo "$DMZ_OPEN_TCP" |nft_ports); do
+      nft_rule DMZ_INPUT_CHAIN "tcp dport $port accept"
     done
   fi
 
@@ -1285,8 +1278,8 @@ setup_dmz_input_chain()
   if [ -n "$DMZ_OPEN_UDP" ]; then
     echo " Allowing UDP port(s): $DMZ_OPEN_UDP"
     IFS=' ,'
-    for port in $DMZ_OPEN_UDP; do
-      iptables -A DMZ_INPUT_CHAIN -p udp --dport $port -j ACCEPT
+    for port in $(echo "$DMZ_OPEN_UDP" |nft_ports); do
+      nft_rule DMZ_INPUT_CHAIN "udp dport $port accept"
     done
   fi
 
@@ -1296,7 +1289,7 @@ setup_dmz_input_chain()
     echo " Allowing IP protocol(s): $DMZ_OPEN_IP"
     IFS=' ,'
     for proto in $DMZ_OPEN_IP; do
-      iptables -A DMZ_INPUT_CHAIN -p $proto -j ACCEPT
+      nft_rule DMZ_INPUT_CHAIN "meta l4proto $proto accept"
     done
   fi
 
@@ -1304,11 +1297,12 @@ setup_dmz_input_chain()
   #############################
   if [ "$DMZ_OPEN_ICMP" != "0" ]; then
     echo " Allowing ICMP-requests(ping)"
-    iptables -A DMZ_INPUT_CHAIN -p icmp --icmp-type echo-request -m limit --limit 20/second --limit-burst 100 -j ACCEPT
+    nft_rule DMZ_INPUT_CHAIN "icmp type echo-request limit rate 20/second burst 100 packets accept"
+    nft_rule DMZ_INPUT_CHAIN "icmpv6 type echo-request limit rate 20/second burst 100 packets accept"
     if [ "$IPV6_SUPPORT" = "1" ]; then
       unset IFS
       for icmpv6_type in $ICMPV6_SPECIAL_TYPES; do
-        ip6tables -A DMZ_INPUT_CHAIN -p icmpv6 --icmpv6-type $icmpv6_type -m hl --hl-eq 255 -j ACCEPT
+        nft_rule DMZ_INPUT_CHAIN "ip6 hoplimit 255 icmpv6 type $icmpv6_type accept"
       done
     fi
   fi
@@ -1316,20 +1310,21 @@ setup_dmz_input_chain()
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" ]; then
-    iptables -A DMZ_INPUT_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 3/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:ICMP-request: "
+    nft_rule DMZ_INPUT_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule DMZ_INPUT_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop ICMP packets
-  iptables -A DMZ_INPUT_CHAIN -p icmp --icmp-type echo-request -j DROP
+  nft_rule DMZ_INPUT_CHAIN "icmp type echo-request drop"
+  nft_rule DMZ_INPUT_CHAIN "icmpv6 type echo-request drop"
 
   # Log everything else
   if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-    iptables -A DMZ_INPUT_CHAIN -m limit --limit 3/m -j LOG --log-level $LOGLEVEL --log-prefix "AIF:DMZ-INPUT denied: "
+    nft_rule DMZ_INPUT_CHAIN "limit rate 3/minute log prefix \"AIF:DMZ-INPUT denied: \" level $LOGLEVEL"
   fi
 
   # Everything else is denied
-  iptables -A DMZ_INPUT_CHAIN -j DROP
+  nft_rule DMZ_INPUT_CHAIN "drop"
 }
 
 
@@ -1349,10 +1344,10 @@ setup_dmz_lan_forward_chain()
       echo "  Allowing $shosts(DMZ) to $dhosts(LAN) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
-            iptables -A DMZ_LAN_FORWARD_CHAIN -s $shost -d $dhost -p tcp --dport $port -j ACCEPT
+            nft_rule DMZ_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
           done
         done
       done
@@ -1368,10 +1363,10 @@ setup_dmz_lan_forward_chain()
       echo "  Allowing $shosts(DMZ) to $dhosts(LAN) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
-            iptables -A DMZ_LAN_FORWARD_CHAIN -s $shost -d $dhost -p udp --dport $port -j ACCEPT
+            nft_rule DMZ_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
           done
         done
       done
@@ -1387,10 +1382,10 @@ setup_dmz_lan_forward_chain()
       echo "  Allowing $shosts(DMZ) to $dhosts(LAN) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for proto in $protos; do
-            iptables -A DMZ_LAN_FORWARD_CHAIN -s $shost -d $dhost -p $proto -j ACCEPT
+            nft_rule DMZ_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
           done
         done
       done
@@ -1401,27 +1396,28 @@ setup_dmz_lan_forward_chain()
   ##########################################
   if [ "$DMZ_LAN_OPEN_ICMP" = "1" ]; then
     echo "  Allowing ICMP-requests(ping)"
-    iptables -A DMZ_LAN_FORWARD_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 20/second --limit-burst 100 -j ACCEPT
+    nft_rule DMZ_LAN_FORWARD_CHAIN "icmp type echo-request limit rate 20/second burst 100 packets accept"
+    nft_rule DMZ_LAN_FORWARD_CHAIN "icmpv6 type echo-request limit rate 20/second burst 100 packets accept"
   fi
 
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" ]; then
-    iptables -A DMZ_LAN_FORWARD_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 3/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:ICMP-request: "
+    nft_rule DMZ_LAN_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule DMZ_LAN_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop ICMP packets
-  iptables -A DMZ_LAN_FORWARD_CHAIN -p icmp --icmp-type echo-request -j DROP
+  nft_rule DMZ_LAN_FORWARD_CHAIN "icmp type echo-request drop"
+  nft_rule DMZ_LAN_FORWARD_CHAIN "icmpv6 type echo-request drop"
 
   # Log everything else
   if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-    iptables -A DMZ_LAN_FORWARD_CHAIN -m limit --limit 3/m -j LOG --log-level $LOGLEVEL --log-prefix "AIF:DMZ->LAN denied: "
+    nft_rule DMZ_LAN_FORWARD_CHAIN "limit rate 3/minute log prefix \"AIF:DMZ->LAN denied: \" level $LOGLEVEL"
   fi
 
   # Everything else is denied
-  iptables -A DMZ_LAN_FORWARD_CHAIN -j DROP
+  nft_rule DMZ_LAN_FORWARD_CHAIN "drop"
 }
 
 
@@ -1441,11 +1437,11 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(INET) to $dhosts(DMZ) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
-              iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -s $shost -d $dhost -p tcp --dport $port -j ACCEPT
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
             done
           done
         done
@@ -1462,11 +1458,11 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(INET) to $dhosts(DMZ) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
-              iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -s $shost -d $dhost -p udp --dport $port -j ACCEPT
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
             done
           done
         done
@@ -1483,11 +1479,11 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(INET) to $dhosts(DMZ) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for proto in $protos; do
             for interface in $interfaces; do
-              iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -s $shost -d $dhost -p $proto -j ACCEPT
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
             done
           done
         done
@@ -1505,15 +1501,14 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(INET) to $dhosts(DMZ) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-                iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -s $shost -d $dhost -p tcp --dport $port \
-                  -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host INET->DMZ denied: "
+                nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET->DMZ denied: \" level $LOGLEVEL"
               fi
-              iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -s $shost -d $dhost -p tcp --dport $port -j DROP
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port drop"
             done
           done
         done
@@ -1530,15 +1525,14 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(INET) to $dhosts(DMZ) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-                iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -s $shost -d $dhost -p udp --dport $port \
-                  -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host INET->DMZ denied: "
+                nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET->DMZ denied: \" level $LOGLEVEL"
               fi
-              iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -s $shost -d $dhost -p udp --dport $port -j DROP
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port drop"
             done
           done
         done
@@ -1555,15 +1549,14 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(INET) to $dhosts(DMZ) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for proto in $protos; do
             for interface in $interfaces; do
               if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-                iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -s $shost -d $dhost -p $proto \
-                  -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host INET->DMZ denied: "
+                nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET->DMZ denied: \" level $LOGLEVEL"
               fi
-              iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -s $shost -d $dhost -p $proto -j DROP
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto drop"
             done
           done
         done
@@ -1583,7 +1576,7 @@ setup_inet_dmz_forward_chain()
       for port in $ports; do
         for destip in $destips; do
           for interface in $interfaces; do
-            iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -d $destip -p tcp --dport $port -j ACCEPT
+            nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port accept"
           done
         done
       done
@@ -1602,7 +1595,7 @@ setup_inet_dmz_forward_chain()
       for port in $ports; do
         for destip in $destips; do
           for interface in $interfaces; do
-            iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -d $destip -p udp --dport $port -j ACCEPT
+            nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) udp dport $port accept"
           done
         done
       done
@@ -1621,7 +1614,7 @@ setup_inet_dmz_forward_chain()
       for proto in $protos; do
         for destip in $destips; do
           for interface in $interfaces; do
-            iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -d $destip -p $proto -j ACCEPT
+            nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) meta l4proto $proto accept"
           done
         done
       done
@@ -1632,8 +1625,8 @@ setup_inet_dmz_forward_chain()
   ##########################################
   if [ "$INET_DMZ_OPEN_ICMP" = "1" ]; then
     echo "  Allowing ICMP-requests(ping)"
-    iptables -A INET_DMZ_FORWARD_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 20/second --limit-burst 100 -j ACCEPT
+    nft_rule INET_DMZ_FORWARD_CHAIN "icmp type echo-request limit rate 20/second burst 100 packets accept"
+    nft_rule INET_DMZ_FORWARD_CHAIN "icmpv6 type echo-request limit rate 20/second burst 100 packets accept"
   fi
 
   # TCP ports to DENY for INET->DMZ
@@ -1649,10 +1642,9 @@ setup_inet_dmz_forward_chain()
         for destip in $destips; do
           for interface in $interfaces; do
             if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-              iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -d $destip -p tcp --dport $port -m limit \
-                --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:INET->DMZ denied: "
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:INET->DMZ denied: \" level $LOGLEVEL"
             fi
-            iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -d $destip -p tcp --dport $port -j DROP
+            nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port drop"
           done
         done
       done
@@ -1672,10 +1664,9 @@ setup_inet_dmz_forward_chain()
         for destip in $destips; do
           for interface in $interfaces; do
             if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-              iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -d $destip -p udp --dport $port -m limit \
-                --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:INET->DMZ denied: "
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) udp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:INET->DMZ denied: \" level $LOGLEVEL"
             fi
-            iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -d $destip -p udp --dport $port -j DROP
+            nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) udp dport $port drop"
           done
         done
       done
@@ -1695,10 +1686,9 @@ setup_inet_dmz_forward_chain()
         for destip in $destips; do
           for interface in $interfaces; do
             if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-              iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -d $destip -p $proto -m limit \
-                --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:INET->DMZ denied: "
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"AIF:INET->DMZ denied: \" level $LOGLEVEL"
             fi
-            iptables -A INET_DMZ_FORWARD_CHAIN $(ipt_if -i "$interface") -d $destip -p $proto -j DROP
+            nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) meta l4proto $proto drop"
           done
         done
       done
@@ -1708,20 +1698,20 @@ setup_inet_dmz_forward_chain()
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" ]; then
-    iptables -A INET_DMZ_FORWARD_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 3/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:ICMP-request: "
+    nft_rule INET_DMZ_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule INET_DMZ_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   echo "  Denying all other INET->DMZ packets"
 
   # Drop ICMP packets
-  iptables -A INET_DMZ_FORWARD_CHAIN -p icmp --icmp-type echo-request -j DROP
+  nft_rule INET_DMZ_FORWARD_CHAIN "icmp type echo-request drop"
+  nft_rule INET_DMZ_FORWARD_CHAIN "icmpv6 type echo-request drop"
 
   if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-    iptables -A INET_DMZ_FORWARD_CHAIN \
-      -m limit --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:INET->DMZ denied: "
+    nft_rule INET_DMZ_FORWARD_CHAIN "limit rate 1/second burst 1 packets log prefix \"AIF:INET->DMZ denied: \" level $LOGLEVEL"
   fi
-  iptables -A INET_DMZ_FORWARD_CHAIN -j DROP
+  nft_rule INET_DMZ_FORWARD_CHAIN "drop"
 }
 
 
@@ -1741,11 +1731,11 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces" "$destips")Allowing $shosts(DMZ) to $dhosts(INET) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
-              iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p tcp --dport $port -j ACCEPT
+              nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
             done
           done
         done
@@ -1762,11 +1752,11 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(DMZ) to $dhosts(INET) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
-              iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p udp --dport $port -j ACCEPT
+              nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
             done
           done
         done
@@ -1783,11 +1773,11 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(DMZ) to $dhosts(INET) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for proto in $protos; do
             for interface in $interfaces; do
-              iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p $proto -j ACCEPT
+              nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
             done
           done
         done
@@ -1805,15 +1795,14 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(DMZ) to $dhosts(INET) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-                iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p tcp --dport $port \
-                  -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host DMZ->INET denied: "
+                nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host DMZ->INET denied: \" level $LOGLEVEL"
               fi
-              iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p tcp --dport $port -j DROP
+              nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port drop"
             done
           done
         done
@@ -1830,15 +1819,14 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(DMZ) to $dhosts(INET) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-                iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p udp --dport $port \
-                  -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host DMZ->INET denied: "
+                nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host DMZ->INET denied: \" level $LOGLEVEL"
               fi
-              iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p udp --dport $port -j DROP
+              nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port drop"
             done
           done
         done
@@ -1855,15 +1843,14 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(DMZ) to $dhosts(INET) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for proto in $protos; do
             for interface in $interfaces; do
               if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-                iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p $proto \
-                  -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host DMZ->INET denied: "
+                nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"AIF:Host DMZ->INET denied: \" level $LOGLEVEL"
               fi
-              iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p $proto -j DROP
+              nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto drop"
             done
           done
         done
@@ -1882,7 +1869,7 @@ setup_dmz_inet_forward_chain()
       IFS=','
       for port in $ports; do
         for interface in $interfaces; do
-          iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p tcp --dport $port -j ACCEPT
+          nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port accept"
         done
       done
     fi
@@ -1899,7 +1886,7 @@ setup_dmz_inet_forward_chain()
       IFS=','
       for port in $ports; do
         for interface in $interfaces; do
-          iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p udp --dport $port -j ACCEPT
+          nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port accept"
         done
       done
     fi
@@ -1916,7 +1903,7 @@ setup_dmz_inet_forward_chain()
       IFS=','
       for proto in $protos; do
         for interface in $interfaces; do
-          iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p $proto -j ACCEPT
+          nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto accept"
         done
       done
     fi
@@ -1934,10 +1921,9 @@ setup_dmz_inet_forward_chain()
       for port in $ports; do
         for interface in $interfaces; do
           if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-            iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p tcp --dport $port -m limit \
-              --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:DMZ->INET denied: "
+            nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:DMZ->INET denied: \" level $LOGLEVEL"
           fi
-          iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p tcp --dport $port -j DROP
+          nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port drop"
         done
       done
     fi
@@ -1955,10 +1941,9 @@ setup_dmz_inet_forward_chain()
       for port in $ports; do
         for interface in $interfaces; do
           if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-            iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p udp --dport $port -m limit \
-              --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:DMZ->INET denied: "
+            nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:DMZ->INET denied: \" level $LOGLEVEL"
           fi
-          iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p udp --dport $port -j DROP
+          nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port drop"
         done
       done
     fi
@@ -1976,10 +1961,9 @@ setup_dmz_inet_forward_chain()
       for proto in $protos; do
         for interface in $interfaces; do
           if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-            iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p $proto -m limit \
-              --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:DMZ->INET denied: "
+            nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"AIF:DMZ->INET denied: \" level $LOGLEVEL"
           fi
-          iptables -A DMZ_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p $proto -j DROP
+          nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto drop"
         done
       done
     fi
@@ -1989,19 +1973,20 @@ setup_dmz_inet_forward_chain()
   ##########################################
   if [ "$DMZ_INET_OPEN_ICMP" != "0" ]; then
     echo "  Allowing ICMP-requests(ping)"
-    iptables -A DMZ_INET_FORWARD_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 20/second --limit-burst 100 -j ACCEPT
+    nft_rule DMZ_INET_FORWARD_CHAIN "icmp type echo-request limit rate 20/second burst 100 packets accept"
+    nft_rule DMZ_INET_FORWARD_CHAIN "icmpv6 type echo-request limit rate 20/second burst 100 packets accept"
   fi
 
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" -a "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-    iptables -A DMZ_INET_FORWARD_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 3/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:ICMP-request: "
+    nft_rule DMZ_INET_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule DMZ_INET_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop ICMP (remaining) packets
-  iptables -A DMZ_INET_FORWARD_CHAIN -p icmp --icmp-type echo-request -j DROP
+  nft_rule DMZ_INET_FORWARD_CHAIN "icmp type echo-request drop"
+  nft_rule DMZ_INET_FORWARD_CHAIN "icmpv6 type echo-request drop"
 
   # Set the default policy (switch to DROP for a protocol when xxx_OPEN_xxx variable is used)
   ###########################################################################################
@@ -2010,14 +1995,13 @@ setup_dmz_inet_forward_chain()
        -z "$DMZ_INET_OPEN_IP"  -a -z "$DMZ_INET_HOST_OPEN_IP"  -a -z "$DMZ_INET_DEFAULT_POLICY_DROP" ] \
      || [ "$DMZ_INET_DEFAULT_POLICY_DROP" = "0" ]; then
     echo "  Allowing all (other) ports/protocols"
-    iptables -A DMZ_INET_FORWARD_CHAIN -j ACCEPT
+    nft_rule DMZ_INET_FORWARD_CHAIN "accept"
   else
     if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-      iptables -A DMZ_INET_FORWARD_CHAIN -m limit \
-        --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:DMZ->INET denied: "
+      nft_rule DMZ_INET_FORWARD_CHAIN "limit rate 1/second burst 1 packets log prefix \"AIF:DMZ->INET denied: \" level $LOGLEVEL"
     fi
     echo "  Denying all (other) ports/protocols"
-    iptables -A DMZ_INET_FORWARD_CHAIN -j DROP
+    nft_rule DMZ_INET_FORWARD_CHAIN "drop"
   fi
 }
 
@@ -2036,9 +2020,9 @@ setup_int_input_chain()
       echo " Allowing $hosts(LAN) for TCP port(s): $ports"
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for port in $ports; do
-          iptables -A INT_INPUT_CHAIN -s $host -p tcp --dport $port -j ACCEPT
+          nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport $port accept"
         done
       done
     fi
@@ -2053,9 +2037,9 @@ setup_int_input_chain()
       echo " Allowing $hosts(LAN) for UDP port(s): $ports"
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for port in $ports; do
-          iptables -A INT_INPUT_CHAIN -s $host -p udp --dport $port -j ACCEPT
+          nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port accept"
         done
       done
     fi
@@ -2070,9 +2054,9 @@ setup_int_input_chain()
       echo " Allowing $hosts(LAN) for IP protocol(s): $protos"
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for proto in $protos; do
-          iptables -A INT_INPUT_CHAIN -s $host -p $proto -j ACCEPT
+          nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto accept"
         done
       done
     fi
@@ -2087,13 +2071,12 @@ setup_int_input_chain()
       echo " Denying $hosts(LAN) for TCP port(s): $ports"
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for port in $ports; do
           if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-            iptables -A INT_INPUT_CHAIN -s $host -p tcp --dport $port \
-              -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host LAN denied: "
+            nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN denied: \" level $LOGLEVEL"
           fi
-          iptables -A INT_INPUT_CHAIN -s $host -p tcp --dport $port -j DROP
+          nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport $port drop"
         done
       done
     fi
@@ -2108,13 +2091,12 @@ setup_int_input_chain()
       echo " Denying $hosts(LAN) for UDP port(s): $ports"
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for port in $ports; do
           if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-            iptables -A INT_INPUT_CHAIN -s $host -p udp --dport $port \
-              -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host LAN denied: "
+            nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN denied: \" level $LOGLEVEL"
           fi
-          iptables -A INT_INPUT_CHAIN -s $host -p udp --dport $port -j DROP
+          nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port drop"
         done
       done
     fi
@@ -2129,13 +2111,12 @@ setup_int_input_chain()
       echo " Denying $hosts(LAN) for IP protocol(s): $protos"
 
       IFS=','
-      for host in `ip_range "$hosts"`; do
+      for host in `nft_hosts "$hosts"`; do
         for proto in $protos; do
           if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-            iptables -A INT_INPUT_CHAIN -s $host -p $proto \
-              -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host LAN denied: "
+            nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN denied: \" level $LOGLEVEL"
           fi
-          iptables -A INT_INPUT_CHAIN -s $host -p $proto -j DROP
+          nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto drop"
         done
       done
     fi
@@ -2146,8 +2127,8 @@ setup_int_input_chain()
   if [ -n "$LAN_OPEN_TCP" ]; then
     echo " Allowing TCP port(s): $LAN_OPEN_TCP"
     IFS=' ,'
-    for port in $LAN_OPEN_TCP; do
-      iptables -A INT_INPUT_CHAIN -p tcp --dport $port -j ACCEPT
+    for port in $(echo "$LAN_OPEN_TCP" |nft_ports); do
+      nft_rule INT_INPUT_CHAIN "tcp dport $port accept"
     done
   fi
 
@@ -2156,8 +2137,8 @@ setup_int_input_chain()
   if [ -n "$LAN_OPEN_UDP" ]; then
     echo " Allowing UDP port(s): $LAN_OPEN_UDP"
     IFS=' ,'
-    for port in $LAN_OPEN_UDP; do
-      iptables -A INT_INPUT_CHAIN -p udp --dport $port -j ACCEPT
+    for port in $(echo "$LAN_OPEN_UDP" |nft_ports); do
+      nft_rule INT_INPUT_CHAIN "udp dport $port accept"
     done
   fi
 
@@ -2167,7 +2148,7 @@ setup_int_input_chain()
     echo " Allowing IP protocol(s): $LAN_OPEN_IP"
     IFS=' ,'
     for proto in $LAN_OPEN_IP; do
-      iptables -A INT_INPUT_CHAIN -p $proto -j ACCEPT
+      nft_rule INT_INPUT_CHAIN "meta l4proto $proto accept"
     done
   fi
 
@@ -2176,12 +2157,11 @@ setup_int_input_chain()
   if [ -n "$LAN_DENY_TCP" ]; then
     echo " Denying TCP port(s): $LAN_DENY_TCP"
     IFS=' ,'
-    for port in $LAN_DENY_TCP; do
+    for port in $(echo "$LAN_DENY_TCP" |nft_ports); do
       if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-        iptables -A INT_INPUT_CHAIN -p tcp --dport $port -m limit \
-          --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:LAN-INPUT denied: "
+        nft_rule INT_INPUT_CHAIN "tcp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:LAN-INPUT denied: \" level $LOGLEVEL"
       fi
-      iptables -A INT_INPUT_CHAIN -p tcp --dport $port -j DROP
+      nft_rule INT_INPUT_CHAIN "tcp dport $port drop"
     done
   fi
 
@@ -2190,12 +2170,11 @@ setup_int_input_chain()
   if [ -n "$LAN_DENY_UDP" ]; then
     echo " Denying UDP port(s): $LAN_DENY_UDP"
     IFS=' ,'
-    for port in $LAN_DENY_UDP; do
+    for port in $(echo "$LAN_DENY_UDP" |nft_ports); do
       if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-        iptables -A INT_INPUT_CHAIN -p udp --dport $port -m limit \
-          --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:LAN-INPUT denied: "
+        nft_rule INT_INPUT_CHAIN "udp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:LAN-INPUT denied: \" level $LOGLEVEL"
       fi
-      iptables -A INT_INPUT_CHAIN -p udp --dport $port -j DROP
+      nft_rule INT_INPUT_CHAIN "udp dport $port drop"
     done
   fi
 
@@ -2206,10 +2185,9 @@ setup_int_input_chain()
     IFS=' ,'
     for proto in $LAN_DENY_IP; do
       if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-        iptables -A INT_INPUT_CHAIN -p $proto -m limit \
-          --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:LAN-INPUT denied: "
+        nft_rule INT_INPUT_CHAIN "meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"AIF:LAN-INPUT denied: \" level $LOGLEVEL"
       fi
-      iptables -A INT_INPUT_CHAIN -p $proto -j DROP
+      nft_rule INT_INPUT_CHAIN "meta l4proto $proto drop"
     done
   fi
 
@@ -2217,18 +2195,20 @@ setup_int_input_chain()
   ###################################
   if [ "$LAN_OPEN_ICMP" != "0" ]; then
     echo " Allowing ICMP-requests(ping)"
-    iptables -A INT_INPUT_CHAIN -p icmp --icmp-type echo-request -m limit --limit 20/second --limit-burst 100 -j ACCEPT
+    nft_rule INT_INPUT_CHAIN "icmp type echo-request limit rate 20/second burst 100 packets accept"
+    nft_rule INT_INPUT_CHAIN "icmpv6 type echo-request limit rate 20/second burst 100 packets accept"
   fi
 
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" -a "$LAN_INPUT_DENY_LOG" != "0" ]; then
-    iptables -A INT_INPUT_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 3/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:ICMP-request: "
+    nft_rule INT_INPUT_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule INT_INPUT_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop (remaining) ICMP packets
-  iptables -A INT_INPUT_CHAIN -p icmp --icmp-type echo-request -j DROP
+  nft_rule INT_INPUT_CHAIN "icmp type echo-request drop"
+  nft_rule INT_INPUT_CHAIN "icmpv6 type echo-request drop"
 
   # Set the default policy
   ########################
@@ -2237,14 +2217,13 @@ setup_int_input_chain()
        -z "$LAN_OPEN_IP"  -a -z "$LAN_HOST_OPEN_IP"  -a -z "$LAN_DEFAULT_POLICY_DROP" ] \
      || [ "$LAN_DEFAULT_POLICY_DROP" = "0" ]; then
     echo " Allowing all (other) ports/protocols"
-    iptables -A INT_INPUT_CHAIN -j ACCEPT
+    nft_rule INT_INPUT_CHAIN "accept"
   else
     echo " Denying all (other) ports/protocols"
     if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-      iptables -A INT_INPUT_CHAIN -m limit \
-        --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:LAN-INPUT denied: "
+      nft_rule INT_INPUT_CHAIN "limit rate 1/second burst 1 packets log prefix \"AIF:LAN-INPUT denied: \" level $LOGLEVEL"
     fi
-    iptables -A INT_INPUT_CHAIN -j DROP
+    nft_rule INT_INPUT_CHAIN "drop"
   fi
 }
 
@@ -2267,10 +2246,10 @@ setup_lan_lan_forward_chain()
       echo "  Allowing $shosts(LAN) to $dhosts(LAN) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
-            iptables -A LAN_LAN_FORWARD_CHAIN -s $shost -d $dhost -p tcp --dport $port -j ACCEPT
+            nft_rule LAN_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
             rtn_val=0
           done
         done
@@ -2287,10 +2266,10 @@ setup_lan_lan_forward_chain()
       echo "  Allowing $shosts(LAN) to $dhosts(LAN) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
-            iptables -A LAN_LAN_FORWARD_CHAIN -s $shost -d $dhost -p udp --dport $port -j ACCEPT
+            nft_rule LAN_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
             rtn_val=0
           done
         done
@@ -2307,10 +2286,10 @@ setup_lan_lan_forward_chain()
       echo "  Allowing $shosts(LAN) to $dhosts(LAN) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for proto in $protos; do
-            iptables -A LAN_LAN_FORWARD_CHAIN -s $shost -d $dhost -p $proto -j ACCEPT
+            nft_rule LAN_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
             rtn_val=0
           done
         done
@@ -2323,8 +2302,8 @@ setup_lan_lan_forward_chain()
   unset IFS
   if [ "$LAN_LAN_OPEN_ICMP" = "1" ]; then
     echo "  Allowing ICMP-requests(ping)"
-    iptables -A LAN_LAN_FORWARD_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 20/second --limit-burst 100 -j ACCEPT
+    nft_rule LAN_LAN_FORWARD_CHAIN "icmp type echo-request limit rate 20/second burst 100 packets accept"
+    nft_rule LAN_LAN_FORWARD_CHAIN "icmpv6 type echo-request limit rate 20/second burst 100 packets accept"
   fi
 
   return $rtn_val
@@ -2347,11 +2326,11 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(LAN) to $dhosts(INET) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
-              iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p tcp --dport $port -j ACCEPT
+              nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
             done
           done
         done
@@ -2368,11 +2347,11 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(LAN) to $dhosts(INET) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
-              iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p udp --dport $port -j ACCEPT
+              nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
             done
           done
         done
@@ -2389,11 +2368,11 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(LAN) to $dhosts(INET) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for proto in $protos; do
             for interface in $interfaces; do
-              iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p $proto -j ACCEPT
+              nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
             done
           done
         done
@@ -2410,15 +2389,14 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(LAN) to $dhosts(INET) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-                iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p tcp --dport $port \
-                  -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host LAN->INET denied: "
+                nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN->INET denied: \" level $LOGLEVEL"
               fi
-              iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p tcp --dport $port -j DROP
+              nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port drop"
             done
           done
         done
@@ -2435,15 +2413,14 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(LAN) to $dhosts(INET) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-                iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p udp --dport $port \
-                  -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host LAN->INET denied: "
+                nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN->INET denied: \" level $LOGLEVEL"
               fi
-              iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p udp --dport $port -j DROP
+              nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port drop"
             done
           done
         done
@@ -2460,15 +2437,14 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(LAN) to $dhosts(INET) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `ip_range "$shosts"`; do
-        for dhost in `ip_range "$dhosts"`; do
+      for shost in `nft_hosts "$shosts"`; do
+        for dhost in `nft_hosts "$dhosts"`; do
           for proto in $protos; do
             for interface in $interfaces; do
               if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-                iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p $proto \
-                  -m limit --limit 1/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Host LAN->INET denied: "
+                nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN->INET denied: \" level $LOGLEVEL"
               fi
-              iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -s $shost -d $dhost -p $proto -j DROP
+              nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto drop"
             done
           done
         done
@@ -2487,7 +2463,7 @@ setup_lan_inet_forward_chain()
       IFS=','
       for port in $ports; do
         for interface in $interfaces; do
-          iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p tcp --dport $port -j ACCEPT
+          nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port accept"
         done
       done
     fi
@@ -2504,7 +2480,7 @@ setup_lan_inet_forward_chain()
       IFS=','
       for port in $ports; do
         for interface in $interfaces; do
-          iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p udp --dport $port -j ACCEPT
+          nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port accept"
         done
       done
     fi
@@ -2521,7 +2497,7 @@ setup_lan_inet_forward_chain()
       IFS=','
       for proto in $protos; do
         for interface in $interfaces; do
-          iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p $proto -j ACCEPT
+          nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto accept"
         done
       done
     fi
@@ -2539,10 +2515,9 @@ setup_lan_inet_forward_chain()
       for port in $ports; do
         for interface in $interfaces; do
           if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-            iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p tcp --dport $port -m limit \
-              --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:LAN->INET denied: "
+            nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:LAN->INET denied: \" level $LOGLEVEL"
           fi
-          iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p tcp --dport $port -j DROP
+          nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port drop"
         done
       done
     fi
@@ -2560,10 +2535,9 @@ setup_lan_inet_forward_chain()
       for port in $ports; do
         for interface in $interfaces; do
           if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-            iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p udp --dport $port -m limit \
-              --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:LAN->INET denied: "
+            nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:LAN->INET denied: \" level $LOGLEVEL"
           fi
-          iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p udp --dport $port -j DROP
+          nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port drop"
         done
       done
     fi
@@ -2581,10 +2555,9 @@ setup_lan_inet_forward_chain()
       for proto in $protos; do
         for interface in $interfaces; do
           if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-            iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p $proto -m limit \
-              --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:LAN->INET denied: "
+            nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"AIF:LAN->INET denied: \" level $LOGLEVEL"
           fi
-          iptables -A LAN_INET_FORWARD_CHAIN $(ipt_if -o "$interface") -p $proto -j DROP
+          nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto drop"
         done
       done
     fi
@@ -2594,19 +2567,20 @@ setup_lan_inet_forward_chain()
   ##########################################
   if [ "$LAN_INET_OPEN_ICMP" != "0" ]; then
     echo "  Allowing ICMP-requests(ping)"
-    iptables -A LAN_INET_FORWARD_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 20/second --limit-burst 100 -j ACCEPT
+    nft_rule LAN_INET_FORWARD_CHAIN "icmp type echo-request limit rate 20/second burst 100 packets accept"
+    nft_rule LAN_INET_FORWARD_CHAIN "icmpv6 type echo-request limit rate 20/second burst 100 packets accept"
   fi
 
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" -a "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-    iptables -A LAN_INET_FORWARD_CHAIN -p icmp --icmp-type echo-request \
-      -m limit --limit 3/m --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:ICMP-request: "
+    nft_rule LAN_INET_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule LAN_INET_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop (remaining) ICMP packets
-  iptables -A LAN_INET_FORWARD_CHAIN -p icmp --icmp-type echo-request -j DROP
+  nft_rule LAN_INET_FORWARD_CHAIN "icmp type echo-request drop"
+  nft_rule LAN_INET_FORWARD_CHAIN "icmpv6 type echo-request drop"
 
   # Set the default policy (switch to DROP for a protocol when xxx_OPEN_xxx variable is used)
   ###########################################################################################
@@ -2615,14 +2589,13 @@ setup_lan_inet_forward_chain()
        -z "$LAN_INET_OPEN_IP"  -a -z "$LAN_INET_HOST_OPEN_IP"  -a -z "$LAN_INET_DEFAULT_POLICY_DROP" ] \
      || [ "$LAN_INET_DEFAULT_POLICY_DROP" = "0" ]; then
     echo "  Allowing all (other) ports/protocols"
-    iptables -A LAN_INET_FORWARD_CHAIN -j ACCEPT
+    nft_rule LAN_INET_FORWARD_CHAIN "accept"
   else
     if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-      iptables -A LAN_INET_FORWARD_CHAIN -m limit \
-        --limit 1/s --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:LAN->INET denied: "
+      nft_rule LAN_INET_FORWARD_CHAIN "limit rate 1/second burst 1 packets log prefix \"AIF:LAN->INET denied: \" level $LOGLEVEL"
     fi
     echo "  Denying all (other) ports/protocols"
-    iptables -A LAN_INET_FORWARD_CHAIN -j DROP
+    nft_rule LAN_INET_FORWARD_CHAIN "drop"
   fi
 }
 
@@ -2635,10 +2608,8 @@ setup_ext_input_chain()
   ## Log scanning of port 0 fingerprinting
   ########################################
   if [ "$SCAN_LOG" != "0" ]; then
-    iptables -A EXT_INPUT_CHAIN -p tcp --dport 0 \
-      -m limit --limit 6/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Port 0 OS fingerprint: "
-    iptables -A EXT_INPUT_CHAIN -p udp --dport 0 \
-      -m limit --limit 6/h --limit-burst 1 -j LOG --log-level $LOGLEVEL --log-prefix "AIF:Port 0 OS fingerprint: "
+    nft_rule EXT_INPUT_CHAIN "tcp dport 0 limit rate 6/hour burst 1 packets log prefix \"AIF:Port 0 OS fingerprint: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "udp dport 0 limit rate 6/hour burst 1 packets log prefix \"AIF:Port 0 OS fingerprint: \" level $LOGLEVEL"
   fi
 
   # Drop port 0 scan packets
