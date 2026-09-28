@@ -94,24 +94,25 @@ sanity_check()
   # Check whether the required binaries exist and are executable
   ##############################################################
   check_command_error nft
+  check_command_error modprobe
+  check_command_error sysctl
+  check_command_error ip
+  check_command_error logger
+  check_command_warning dig nslookup
+
   check_command_error awk
   check_command_error tr
-  check_command_error ip
   check_command_error cut
   check_command_error uname
   check_command_error sed
   check_command_error cat
   check_command_error date
-  check_command_error modprobe
-  check_command_error sysctl
   check_command_error head
   check_command_error tail
   check_command_error wc
-  check_command_error logger
 
   check_command_warning pgrep
   check_command_warning pkill
-  check_command_warning dig nslookup
 }
 
 

@@ -52,21 +52,27 @@ sanity_check()
   if [ "$IPV6_DETECTED" = "1" ]; then
     check_command_error ip6tables
   fi
+
+  # Used by the main script/plugins:
+  check_command_error nft
+  check_command_error modprobe
+  check_command_error sysctl
+  check_command_error ip
+  check_command_error logger
+  check_command_warning dig nslookup
+
+  # Helper utilities
   check_command_error awk
   check_command_error tr
-  check_command_error ip
   check_command_error cut
   check_command_error uname
   check_command_error sed
   check_command_error cat
   check_command_error date
-  check_command_error modprobe
-  check_command_error sysctl
   check_command_error head
   check_command_error tail
   check_command_error wc
   check_command_error gzip
-  check_command_error logger
   check_command_error chmod
   check_command_error chown
   check_command_error find
@@ -75,7 +81,6 @@ sanity_check()
   check_command_error mkdir
   check_command_error rmdir
   check_command_error ln
-  check_command_warning dig nslookup
 }
 
 
