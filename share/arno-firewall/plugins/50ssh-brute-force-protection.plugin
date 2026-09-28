@@ -59,7 +59,7 @@ plugin_start()
     # Create whitelist:
     echo "${INDENT}Allowing bypass of SSH protection checks for: $SSH_BFP_TRUSTED_HOSTS"
     IFS=' ,'
-    for host in `nft_hosts "$SSH_BFP_TRUSTED_HOSTS"`; do
+    for host in $(nft_hosts "$SSH_BFP_TRUSTED_HOSTS"); do
       nft_rule SSH_CHK "$(nft_addr saddr $host) return"
     done
   fi

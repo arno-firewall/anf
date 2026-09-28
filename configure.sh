@@ -108,7 +108,7 @@ get_user_yn()
 
   read ANSWER_WITH_CASE
 
-  ANSWER=`echo "$ANSWER_WITH_CASE" |tr A-Z a-z`
+  ANSWER=$(echo "$ANSWER_WITH_CASE" |tr A-Z a-z)
 
   if [ "$ANSWER" = "y" -o "$ANSWER" = "yes" ]; then
     return 0

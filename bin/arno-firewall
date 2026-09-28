@@ -970,8 +970,8 @@ setup_inet_forward_rules()
       echo "$(show_if_ip "$interfaces")Forwarding(non-NAT) TCP port(s): $ports from $shosts(INET) to $dhosts"
 
       IFS=' ,'
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               nft_rule EXT_FORWARD_IN_CHAIN "$(nft_if iifname $interface) $(nft_if oifname $interface !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
@@ -993,8 +993,8 @@ setup_inet_forward_rules()
       echo "$(show_if_ip "$interfaces")Forwarding(non-NAT) UDP port(s): $ports from $shosts(INET) to $dhosts"
 
       IFS=' ,'
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               nft_rule EXT_FORWARD_IN_CHAIN "$(nft_if iifname $interface) $(nft_if oifname $interface !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
@@ -1016,8 +1016,8 @@ setup_inet_forward_rules()
       echo "$(show_if_ip "$interfaces")Forwarding(non-NAT) IP protocol(s): $protos from $shosts(INET) to $dhosts"
 
       IFS=' ,'
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for proto in $protos; do
             for interface in $interfaces; do
               nft_rule EXT_FORWARD_IN_CHAIN "$(nft_if iifname $interface) $(nft_if oifname $interface !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
@@ -1046,7 +1046,7 @@ setup_dmz_input_chain()
       echo " Allowing $hosts(DMZ) for TCP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           nft_rule DMZ_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport $port accept"
         done
@@ -1065,7 +1065,7 @@ setup_dmz_input_chain()
       echo " Allowing $hosts(DMZ) for UDP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           nft_rule DMZ_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port accept"
         done
@@ -1084,7 +1084,7 @@ setup_dmz_input_chain()
       echo " Allowing $hosts(DMZ) for IP protocol(s): $protos"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           nft_rule DMZ_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto accept"
         done
@@ -1181,8 +1181,8 @@ setup_dmz_lan_forward_chain()
       echo "  Allowing $shosts(DMZ) to $dhosts(LAN) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             nft_rule DMZ_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
           done
@@ -1202,8 +1202,8 @@ setup_dmz_lan_forward_chain()
       echo "  Allowing $shosts(DMZ) to $dhosts(LAN) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             nft_rule DMZ_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
           done
@@ -1223,8 +1223,8 @@ setup_dmz_lan_forward_chain()
       echo "  Allowing $shosts(DMZ) to $dhosts(LAN) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for proto in $protos; do
             nft_rule DMZ_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
           done
@@ -1280,8 +1280,8 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(INET) to $dhosts(DMZ) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
@@ -1303,8 +1303,8 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(INET) to $dhosts(DMZ) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
@@ -1326,8 +1326,8 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(INET) to $dhosts(DMZ) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for proto in $protos; do
             for interface in $interfaces; do
               nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
@@ -1350,8 +1350,8 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(INET) to $dhosts(DMZ) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
@@ -1376,8 +1376,8 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(INET) to $dhosts(DMZ) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
@@ -1402,8 +1402,8 @@ setup_inet_dmz_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(INET) to $dhosts(DMZ) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for proto in $protos; do
             for interface in $interfaces; do
               if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
@@ -1598,8 +1598,8 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces" "$destips")Allowing $shosts(DMZ) to $dhosts(INET) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
@@ -1621,8 +1621,8 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(DMZ) to $dhosts(INET) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
@@ -1644,8 +1644,8 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(DMZ) to $dhosts(INET) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for proto in $protos; do
             for interface in $interfaces; do
               nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
@@ -1668,8 +1668,8 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(DMZ) to $dhosts(INET) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
@@ -1694,8 +1694,8 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(DMZ) to $dhosts(INET) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
@@ -1720,8 +1720,8 @@ setup_dmz_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(DMZ) to $dhosts(INET) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for proto in $protos; do
             for interface in $interfaces; do
               if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
@@ -1911,7 +1911,7 @@ setup_int_input_chain()
       echo " Allowing $hosts(LAN) for TCP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport $port accept"
         done
@@ -1930,7 +1930,7 @@ setup_int_input_chain()
       echo " Allowing $hosts(LAN) for UDP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port accept"
         done
@@ -1949,7 +1949,7 @@ setup_int_input_chain()
       echo " Allowing $hosts(LAN) for IP protocol(s): $protos"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto accept"
         done
@@ -1968,7 +1968,7 @@ setup_int_input_chain()
       echo " Denying $hosts(LAN) for TCP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
             nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN denied: \" level $LOGLEVEL"
@@ -1990,7 +1990,7 @@ setup_int_input_chain()
       echo " Denying $hosts(LAN) for UDP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
             nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN denied: \" level $LOGLEVEL"
@@ -2012,7 +2012,7 @@ setup_int_input_chain()
       echo " Denying $hosts(LAN) for IP protocol(s): $protos"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
             nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN denied: \" level $LOGLEVEL"
@@ -2161,8 +2161,8 @@ setup_lan_lan_forward_chain()
       echo "  Allowing $shosts(LAN) to $dhosts(LAN) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             nft_rule LAN_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
             rtn_val=0
@@ -2183,8 +2183,8 @@ setup_lan_lan_forward_chain()
       echo "  Allowing $shosts(LAN) to $dhosts(LAN) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             nft_rule LAN_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
             rtn_val=0
@@ -2205,8 +2205,8 @@ setup_lan_lan_forward_chain()
       echo "  Allowing $shosts(LAN) to $dhosts(LAN) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for proto in $protos; do
             nft_rule LAN_LAN_FORWARD_CHAIN "$(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
             rtn_val=0
@@ -2247,8 +2247,8 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(LAN) to $dhosts(INET) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port accept"
@@ -2270,8 +2270,8 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(LAN) to $dhosts(INET) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port accept"
@@ -2293,8 +2293,8 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Allowing $shosts(LAN) to $dhosts(INET) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for proto in $protos; do
             for interface in $interfaces; do
               nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto accept"
@@ -2316,8 +2316,8 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(LAN) to $dhosts(INET) for TCP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
@@ -2342,8 +2342,8 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(LAN) to $dhosts(INET) for UDP port(s): $ports"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
@@ -2368,8 +2368,8 @@ setup_lan_inet_forward_chain()
       echo "  $(show_if_ip "$interfaces")Denying $shosts(LAN) to $dhosts(INET) for IP protocol(s): $protos"
 
       IFS=','
-      for shost in `nft_hosts "$shosts"`; do
-        for dhost in `nft_hosts "$dhosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
+        for dhost in $(nft_hosts "$dhosts"); do
           for proto in $protos; do
             for interface in $interfaces; do
               if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
@@ -2652,7 +2652,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Allowing $hosts for TCP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2676,7 +2676,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Allowing $hosts for UDP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2700,7 +2700,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Allowing $hosts for IP protocol(s): $protos"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2724,7 +2724,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Allowing $hosts for ICMP-requests(ping)"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for destip in $destips; do
           for interface in $interfaces; do
             nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) icmp type echo-request accept"
@@ -2747,7 +2747,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Rejecting $hosts for TCP port(s) (NO LOG): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2771,7 +2771,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Rejecting $hosts for UDP port(s) (NO LOG): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2795,7 +2795,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Rejecting $hosts for TCP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2821,7 +2821,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Rejecting $hosts for UDP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2847,7 +2847,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Denying $hosts for TCP port(s) (NO LOG): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2871,7 +2871,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Denying $hosts for UDP port(s) (NO LOG): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2894,7 +2894,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Denying $hosts for IP protocol(s) (NO LOG): $protos"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2917,7 +2917,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Denying $hosts for ICMP-requests(ping)"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for destip in $destips; do
           for interface in $interfaces; do
             nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) icmp type echo-request jump POST_INPUT_DROP_CHAIN"
@@ -2940,7 +2940,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Denying $hosts for TCP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2966,7 +2966,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Denying $hosts for UDP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -2992,7 +2992,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Denying $hosts for IP protocol(s): $protos"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -3018,7 +3018,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Denying $hosts for ICMP-requests(ping)"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for destip in $destips; do
           for interface in $interfaces; do
             if [ "$ICMP_DROP_LOG" != "0" ]; then
@@ -3136,7 +3136,7 @@ setup_ext_input_chain()
       echo " $(show_if_ip "$interfaces" "$destips")Allowing $hosts full (inbound) access"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for destip in $destips; do
           for interface in $interfaces; do
             nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) accept"
@@ -3556,7 +3556,7 @@ setup_ext_output_chain()
       echo " $(show_if_ip "$interfaces")Allowing $hosts full (outbound) access"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for srcip in $srcips; do
           for interface in $interfaces; do
             nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) accept"
@@ -3577,7 +3577,7 @@ setup_ext_output_chain()
       echo " $(show_if_ip "$interfaces" "$srcips")Allowing $hosts for TCP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for srcip in $srcips; do
             for interface in $interfaces; do
@@ -3600,7 +3600,7 @@ setup_ext_output_chain()
       echo " $(show_if_ip "$interfaces" "$srcips")Allowing $hosts for UDP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for srcip in $srcips; do
             for interface in $interfaces; do
@@ -3623,7 +3623,7 @@ setup_ext_output_chain()
       echo " $(show_if_ip "$interfaces" "$srcips")Allowing $hosts for IP protocol(s): $protos"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           for srcip in $srcips; do
             for interface in $interfaces; do
@@ -3646,7 +3646,7 @@ setup_ext_output_chain()
       echo " $(show_if_ip "$interfaces" "$srcips")Denying $hosts for TCP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for srcip in $srcips; do
             for interface in $interfaces; do
@@ -3672,7 +3672,7 @@ setup_ext_output_chain()
       echo " $(show_if_ip "$interfaces" "$srcips")Denying $hosts for UDP port(s): $ports"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for srcip in $srcips; do
             for interface in $interfaces; do
@@ -3698,7 +3698,7 @@ setup_ext_output_chain()
       echo " $(show_if_ip "$interfaces" "$srcips")Denying $hosts for IP protocol(s): $protos"
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           for srcip in $srcips; do
             for interface in $interfaces; do
@@ -4008,7 +4008,7 @@ setup_input_log()
       echo "$(show_if_ip "$interfaces" "$destips")Logging incoming connections of: $hosts"
 
       IFS=' ,'
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for destip in $destips; do
           for interface in $interfaces; do
             nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) ct state new limit rate 12/minute burst 50 packets log prefix \"AIF:Hostwise INPUT log: \" level $LOGLEVEL"
@@ -4029,7 +4029,7 @@ setup_input_log()
       echo "$(show_if_ip "$interfaces" "$destips")Logging incoming connections of $hosts to TCP port(s): $ports"
 
       IFS=' ,'
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -4053,7 +4053,7 @@ setup_input_log()
       echo "$(show_if_ip "$interfaces" "$destips")Logging incoming connections of $hosts to UDP port(s): $ports"
 
       IFS=' ,'
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -4076,7 +4076,7 @@ setup_input_log()
       echo "$(show_if_ip "$interfaces" "$destips")Logging incoming connections of $hosts to IP protocol(s): $protos"
 
       IFS=' ,'
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -4168,7 +4168,7 @@ setup_output_log()
       echo "$(show_if_ip "$interfaces" "$srcips")Logging outgoing connections to: $hosts"
 
       IFS=' ,'
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for srcip in $srcips; do
           for interface in $interfaces; do
             nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) ct state new limit rate 12/minute burst 50 packets log prefix \"AIF:Hostwise OUTPUT log: \" level $LOGLEVEL"
@@ -4190,7 +4190,7 @@ setup_output_log()
       echo "$(show_if_ip "$interfaces" "$srcips")Logging outgoing connections of $hosts to TCP port(s): $ports"
 
       IFS=' ,'
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for srcip in $srcips; do
             for interface in $interfaces; do
@@ -4214,7 +4214,7 @@ setup_output_log()
       echo "$(show_if_ip "$interfaces" "$srcips")Logging outgoing connections of $hosts to UDP port(s): $ports"
 
       IFS=' ,'
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for srcip in $srcips; do
             for interface in $interfaces; do
@@ -4237,7 +4237,7 @@ setup_output_log()
       echo "$(show_if_ip "$interfaces" "$srcips")Logging outgoing connections of $hosts to IP protocol(s): $protos"
 
       IFS=' ,'
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           for srcip in $srcips; do
             for interface in $interfaces; do
@@ -4319,7 +4319,7 @@ setup_hostblock_chain()
     for hosts in $BLOCK_HOSTS; do
       printf "$hosts "
 
-      for host in `ip_range "$hosts"`; do
+      for host in $(ip_range "$hosts"); do
         get_numeric_ip_version "$host"
         case $? in
           4) nft_cmd "add element inet $NFT_TABLE aif_blocklist { $host }" ;;
@@ -4342,7 +4342,7 @@ setup_hostblock_chain()
       unset IFS
       sed -e 's|[#;].*||' -e 's| *$||' -e '/^$/d' "$BLOCK_HOSTS_FILE" |while read hosts; do
         IFS=','
-        for host in `ip_range "$hosts"`; do
+        for host in $(ip_range "$hosts"); do
           get_numeric_ip_version "$host"
           case $? in
             4) nft_cmd "add element inet $NFT_TABLE aif_blocklist { $host }" ;;
@@ -4504,7 +4504,7 @@ plugins_start()
       PLUGIN_CMD=start
       if [ -f "$PLUGIN_LOAD_FILE_RESTART" ]; then
         IFS=$EOL
-        for plugin_restart in `cat "$PLUGIN_LOAD_FILE_RESTART"`; do
+        for plugin_restart in $(cat "$PLUGIN_LOAD_FILE_RESTART"); do
           if [ "$plugin_restart" = "$plugin" ]; then
             if grep -q "^plugin_restart\(\)" "$plugin"; then
               PLUGIN_CMD=restart
@@ -4570,7 +4570,7 @@ plugins_stop()
     echo "Stopping (user) plugins..."
 
     IFS=$EOL
-    for plugin in `cat "$PLUGIN_LOAD_FILE"`; do
+    for plugin in $(cat "$PLUGIN_LOAD_FILE"); do
       plugin_name="$(basename "$plugin" |sed 's/^[0-9]*//')"
 
       if [ -f "$plugin" ]; then
@@ -4637,7 +4637,7 @@ plugins_status()
     echo "---------------------------------"
 
     IFS=$EOL
-    for plugin in `cat "$PLUGIN_LOAD_FILE"`; do
+    for plugin in $(cat "$PLUGIN_LOAD_FILE"); do
       # Only issue the status command for plugins that support the PLUGIN_CMD-variable:
       if grep -q "^plugin_status\(\)" "$plugin"; then
         if [ "${plugin%$match.plugin}" != "${plugin}" ]; then
@@ -5260,17 +5260,17 @@ setup_firewall_rules()
       echo "$(show_if_ip "$interfaces" "$destips")Forwarding(NAT) TCP port(s) $(show_hosts_ports "$shosts" "$ports") to $(echo "$dhost_dport" |tr "$SEP-" '::')"
 
       IFS=' ,'
-      for shost in `nft_hosts "$shosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
         for port in $ports; do
           for destip in $destips; do
             # Portforward for all specified interfaces
             for eif in $interfaces; do
               # This code makes it possible to forward to a different port on the internal host
-              dport=`get_ports_hp "$dhost_dport" "$port"`
+              dport=$(get_ports_hp "$dhost_dport" "$port")
               dnat_to="$(echo "$dhost_dport" |sed -e "s/$SEP/:/" -e 's/:\([0-9]*\):\([0-9]*\)$/:\1-\2/')"
 
               nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $eif) $(nft_addr saddr $shost) $(nft_addr daddr $destip) tcp dport $port dnat ip to $dnat_to"
-              dhost=`get_hosts_hp "$dhost_dport"`
+              dhost=$(get_hosts_hp "$dhost_dport")
               if [ -n "$dhost" ]; then
                 nft_rule EXT_FORWARD_IN_CHAIN "meta nfproto ipv4 ct status dnat $(nft_if iifname $eif) $(nft_if oifname $eif !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $dport accept"
               fi
@@ -5293,17 +5293,17 @@ setup_firewall_rules()
       echo "$(show_if_ip "$interfaces" "$destips")Forwarding(NAT) UDP port(s) $(show_hosts_ports "$shosts" "$ports") to $(echo "$dhost_dport" |tr "$SEP-" '::')"
 
       IFS=' ,'
-      for shost in `nft_hosts "$shosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
         for port in $ports; do
           for destip in $destips; do
             # Portforward for all specified interfaces
             for eif in $interfaces; do
               # This code makes it possible to forward to a different port on the internal host
-              dport=`get_ports_hp "$dhost_dport" "$port"`
+              dport=$(get_ports_hp "$dhost_dport" "$port")
               dnat_to="$(echo "$dhost_dport" |sed -e "s/$SEP/:/" -e 's/:\([0-9]*\):\([0-9]*\)$/:\1-\2/')"
 
               nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $eif) $(nft_addr saddr $shost) $(nft_addr daddr $destip) udp dport $port dnat ip to $dnat_to"
-              dhost=`get_hosts_hp "$dhost_dport"`
+              dhost=$(get_hosts_hp "$dhost_dport")
               if [ -n "$dhost" ]; then
                 nft_rule EXT_FORWARD_IN_CHAIN "meta nfproto ipv4 ct status dnat $(nft_if iifname $eif) $(nft_if oifname $eif !=) $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $dport accept"
               fi
@@ -5326,7 +5326,7 @@ setup_firewall_rules()
       echo "$(show_if_ip "$interfaces" "$destips")Forwarding(NAT) IP protocol(s) $(show_hosts_ports "$shosts" "$protos") to $dhost"
 
       IFS=' ,'
-      for shost in `nft_hosts "$shosts"`; do
+      for shost in $(nft_hosts "$shosts"); do
         for proto in $protos; do
           for destip in $destips; do
             for eif in $interfaces; do
@@ -5535,7 +5535,7 @@ show_failed()
 
 show_stop()
 {
-  DATE=`LC_ALL=C date +'%b %d %H:%M:%S'`
+  DATE=$(LC_ALL=C date +'%b %d %H:%M:%S')
   echo "$DATE Stopping Arno's (NFT) Firewall(AIF) v$MY_VERSION"
   echo "** Stopping Arno's (NFT) Firewall(AIF) v$MY_VERSION **" |log_msg
 }
@@ -5543,7 +5543,7 @@ show_stop()
 
 show_stop_blocked()
 {
-  DATE=`LC_ALL=C date +'%b %d %H:%M:%S'`
+  DATE=$(LC_ALL=C date +'%b %d %H:%M:%S')
   echo "$DATE FIREWALL DISABLED & BLOCKING ALL INTERNET TRAFFIC!"
   echo "** FIREWALL DISABLED & BLOCKING ALL INTERNET TRAFFIC! **" |log_msg
 }
@@ -5553,7 +5553,7 @@ show_stop_blocked()
 show_applied()
 {
   echo ""
-  DATE=`LC_ALL=C date +'%b %d %H:%M:%S'`
+  DATE=$(LC_ALL=C date +'%b %d %H:%M:%S')
 
   if [ $RULE_WARNING -ne 0 ]; then
     printf "$DATE \033[40m\033[1;31mWARNING: $RULE_WARNING firewall rules failed to apply!\n\033[0m" >&2
@@ -5567,14 +5567,14 @@ show_applied()
 
 show_disabled()
 {
-  DATE=`LC_ALL=C date +'%b %d %H:%M:%S'`
+  DATE=$(LC_ALL=C date +'%b %d %H:%M:%S')
   echo "$DATE FIREWALL DISABLED!"
 }
 
 
 show_help()
 {
-  echo "Usage: `basename $0` { start | stop | restart | force-reload | status }" >&2
+  echo "Usage: $(basename $0) { start | stop | restart | force-reload | status }" >&2
   echo "start                       = Start firewall" >&2
   echo "stop                        = Stop firewall" >&2
   echo "stop-block                  = Stop firewall & block all internet packets" >&2

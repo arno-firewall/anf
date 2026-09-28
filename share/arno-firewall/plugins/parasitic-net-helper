@@ -38,7 +38,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Denying access from $shosts to $dhosts for TCP port(s): $ports"
 
       IFS=' ,'
-      for dhost in `nft_hosts "$dhosts"`; do
+      for dhost in $(nft_hosts "$dhosts"); do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping TCP deny rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -46,7 +46,7 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `nft_hosts "$shosts"`; do
+          for shost_ip in $(nft_hosts "$shosts"); do
             for port in $ports; do
               if [ "$PARASITIC_NET_DENY_LOG" = "1" ]; then
                 nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) tcp dport $port limit rate 1/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
@@ -66,7 +66,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Denying access from $shosts to $dhosts for UDP port(s): $ports"
 
       IFS=' ,'
-      for dhost in `nft_hosts "$dhosts"`; do
+      for dhost in $(nft_hosts "$dhosts"); do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping UDP deny rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -74,7 +74,7 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `nft_hosts "$shosts"`; do
+          for shost_ip in $(nft_hosts "$shosts"); do
             for port in $ports; do
               if [ "$PARASITIC_NET_DENY_LOG" = "1" ]; then
                 nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) udp dport $port limit rate 1/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
@@ -94,7 +94,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Denying access from $shosts to $dhosts for ICMP requests"
 
       IFS=' ,'
-      for dhost in `nft_hosts "$dhosts"`; do
+      for dhost in $(nft_hosts "$dhosts"); do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping ICMP deny rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -102,7 +102,7 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `nft_hosts "$shosts"`; do
+          for shost_ip in $(nft_hosts "$shosts"); do
             if [ "$PARASITIC_NET_DENY_LOG" = "1" ]; then
               nft_rule PARASITIC_NET_ACL "$(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) icmp type echo-request limit rate 1/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
             fi
@@ -120,7 +120,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Denying access from $shosts to $dhosts for IP protocol(s): $protos"
 
       IFS=' ,'
-      for dhost in `nft_hosts "$dhosts"`; do
+      for dhost in $(nft_hosts "$dhosts"); do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping IP deny rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -128,7 +128,7 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `nft_hosts "$shosts"`; do
+          for shost_ip in $(nft_hosts "$shosts"); do
             for proto in $protos; do
               if [ "$PARASITIC_NET_DENY_LOG" = "1" ]; then
                 nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) meta l4proto $proto limit rate 1/minute burst 5 packets log prefix \"AIF:Parasitic-net denied: \" level $LOGLEVEL"
@@ -148,7 +148,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Allowing access from $shosts to $dhosts for TCP port(s): $ports"
 
       IFS=' ,'
-      for dhost in `nft_hosts "$dhosts"`; do
+      for dhost in $(nft_hosts "$dhosts"); do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping TCP allow rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -156,7 +156,7 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `nft_hosts "$shosts"`; do
+          for shost_ip in $(nft_hosts "$shosts"); do
             for port in $ports; do
               nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) tcp dport $port accept"
             done
@@ -172,7 +172,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Allowing access from $shosts to $dhosts for UDP port(s): $ports"
 
       IFS=' ,'
-      for dhost in `nft_hosts "$dhosts"`; do
+      for dhost in $(nft_hosts "$dhosts"); do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping UDP allow rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -180,7 +180,7 @@ parasitic_net_helper_do_work()
         fi
 
         for dhost_ip in $host_ip; do
-          for shost_ip in `nft_hosts "$shosts"`; do
+          for shost_ip in $(nft_hosts "$shosts"); do
             for port in $ports; do
               nft_rule PARASITIC_NET_ACL "meta nfproto ipv4 $(nft_addr saddr $shost_ip) $(nft_addr daddr $dhost_ip) udp dport $port accept"
             done
@@ -197,7 +197,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Allowing access from $shosts to $dhosts for ICMP requests"
 
       IFS=' ,'
-      for dhost in `nft_hosts "$dhosts"`; do
+      for dhost in $(nft_hosts "$dhosts"); do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping ICMP allow rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1
@@ -219,7 +219,7 @@ parasitic_net_helper_do_work()
       echo "${INDENT}Allowing access from $shosts to $dhosts for IP protocol(s): $protos"
 
       IFS=' ,'
-      for dhost in `nft_hosts "$dhosts"`; do
+      for dhost in $(nft_hosts "$dhosts"); do
         if ! get_dynamic_host_cached $dhost || [ -z "$host_ip" ]; then
           echo "** WARNING: Skipping IP allow rule(s) for unresolvable host \"$dhost\"! **" >&2
           RETVAL=1

@@ -482,7 +482,7 @@ modprobe()
     # Make sure environment variable is not set
     MODPROBE_OPTIONS=""
 
-    result=`$MODPROBE $@ 2>&1`
+    result=$($MODPROBE $@ 2>&1)
     retval=$?
 
     if [ $retval -ne 0 ]; then
@@ -544,7 +544,7 @@ modprobe_multi()
         modprobe_commandline="$modprobe_commandline $module"
 
         IFS=' '
-        result=`$modprobe_commandline 2>&1`
+        result=$($modprobe_commandline 2>&1)
         retval=$?
 
         if [ $retval -ne 0 ]; then
@@ -584,7 +584,7 @@ sysctl()
 {
   local result retval IFS=' '
 
-  result=`$SYSCTL "$@" 2>&1`
+  result=$($SYSCTL "$@" 2>&1)
   retval=$?
 
   if [ $retval -ne 0 ]; then
@@ -624,7 +624,7 @@ sysctl_multi()
       fi
       sysctl_commandline="$sysctl_commandline $variable"
 
-      result=`$sysctl_commandline 2>&1`
+      result=$($sysctl_commandline 2>&1)
       retval=$?
 
       if [ $retval -eq 0 ]; then
@@ -1723,7 +1723,7 @@ ip_range()
 
     if [ -n "$stop" -a -n "$start" ]; then
       IFS=' '
-      for x in `seq -s' ' $start $stop`; do
+      for x in $(seq -s' ' $start $stop); do
         if [ $FIRST -eq 1 ]; then
           FIRST=0
         else

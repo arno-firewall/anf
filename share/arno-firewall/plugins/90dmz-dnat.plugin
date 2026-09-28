@@ -60,7 +60,7 @@ plugin_start()
     if parse_rule "$rule" HOST_OPEN_TCP "interfaces-destips-hosts-ports"; then
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -81,7 +81,7 @@ plugin_start()
     if parse_rule "$rule" HOST_OPEN_UDP "interfaces-destips-hosts-ports"; then
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
@@ -102,7 +102,7 @@ plugin_start()
     if parse_rule "$rule" HOST_OPEN_IP "interfaces-destips-hosts-protos"; then
 
       IFS=','
-      for host in `nft_hosts "$hosts"`; do
+      for host in $(nft_hosts "$hosts"); do
         for proto in $protos; do
           for destip in $destips; do
             for interface in $interfaces; do

@@ -111,7 +111,7 @@ copy_ask_if_exist()
   fi
 
   unset IFS
-  for SOURCE in `find "$1" -type f |grep -v -e '/\.svn/' -e '/\.git/'`; do
+  for SOURCE in $(find "$1" -type f |grep -v -e '/\.svn/' -e '/\.git/'); do
     if echo "$2" |grep -q '/$'; then
       FN="${SOURCE#$1}"
       if [ -z "$FN" ]; then
@@ -178,7 +178,7 @@ copy_skip_if_exist()
   fi
 
   unset IFS
-  for SOURCE in `find "$1" -type f |grep -v -e '/\.svn/' -e '/\.git/'`; do
+  for SOURCE in $(find "$1" -type f |grep -v -e '/\.svn/' -e '/\.git/'); do
     if echo "$2" |grep -q '/$'; then
       FN="${SOURCE#$1}"
       if [ -z "$FN" ]; then
@@ -229,7 +229,7 @@ copy_overwrite()
   fi
 
   unset IFS
-  for SOURCE in `find "$1" -type f |grep -v -e '/\.svn/' -e '/\.git/'`; do
+  for SOURCE in $(find "$1" -type f |grep -v -e '/\.svn/' -e '/\.git/'); do
     if echo "$2" |grep -q '/$'; then
       FN="${SOURCE#$1}"
       if [ -z "$FN" ]; then
@@ -271,7 +271,7 @@ get_user_yn()
 
   read answer_with_case
 
-  ANSWER=`echo "$answer_with_case" |tr A-Z a-z`
+  ANSWER=$(echo "$answer_with_case" |tr A-Z a-z)
 
   if [ "$ANSWER" = "y" -o "$ANSWER" = "yes" ]; then
     return 0

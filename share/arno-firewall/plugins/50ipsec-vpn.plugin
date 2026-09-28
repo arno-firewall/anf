@@ -63,7 +63,7 @@ plugin_start()
 
   echo "${INDENT}Allowing internet hosts $IPSEC_ALLOWED_HOSTS to access the VPN service"
   IFS=' ,'
-  for host in `nft_hosts "$IPSEC_ALLOWED_HOSTS"`; do
+  for host in $(nft_hosts "$IPSEC_ALLOWED_HOSTS"); do
     nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport 500 accept"
     get_numeric_ip_version "$host"
     ipver=$?

@@ -99,14 +99,14 @@ if [ "$SERVER1" = "DOWN" ] && [ "$SERVER2" = "DOWN" ] && [  "$SERVER3" = "DOWN" 
 			if (ping -w 5 -nq -I $dialup_if $ping_server1|grep -v '100%\ packet\ loss' 2>&1>/dev/null) 
 				then
 				# Pick up the new IP for adjusting the firewall script.
-				OUT_IP=`ifconfig|grep -A 2 $dialup_if|grep inet\ addr:|sed 's/.*inet\ addr\:\([0-9]*.[0-9]*.[0-9]*.[0-9]*\).*/\1/g'`
+				OUT_IP=$(ifconfig|grep -A 2 $dialup_if|grep inet\ addr:|sed 's/.*inet\ addr\:\([0-9]*.[0-9]*.[0-9]*.[0-9]*\).*/\1/g')
 				echo .
 				echo "New public IP address is <$OUT_IP> from UMTS/dialup device $dialup."
 				echo .
 				echo "Restarting the Firewall routing for new connection."
 				echo .
 				# Make sure the original firewall script is saved (here we datestamp it just in case)
-				cp -p $firewall $firewall.`date +"%d%m%Y%H%M%S"`
+				cp -p $firewall $firewall.$(date +"%d%m%Y%H%M%S")
 				sed 's/\(NAT_STATIC_IP="$normal_ext_ip \)[0-9]*.[0-9]*.[0-9]*.[0-9]*/\1'$OUT_IP'/g' $firewall >/tmp/firewall.conf
 				mv /tmp/firewall.conf $firewall
 				$firestarter restart
@@ -125,8 +125,8 @@ if [ "$SERVER1" = "DOWN" ] && [ "$SERVER2" = "DOWN" ] && [  "$SERVER3" = "DOWN" 
 			# Failover is working 
 			echo .
 			echo "Failover system is already working"
-			OUT_IP1=`cat /tmp/FAILOVER_IP`
-			OUT_IP2=`ifconfig|grep -A 2 $dialup_if|grep inet\ addr:|sed 's/.*inet\ addr\:\([0-9]*.[0-9]*.[0-9]*.[0-9]*\).*/\1/g'`
+			OUT_IP1=$(cat /tmp/FAILOVER_IP)
+			OUT_IP2=$(ifconfig|grep -A 2 $dialup_if|grep inet\ addr:|sed 's/.*inet\ addr\:\([0-9]*.[0-9]*.[0-9]*.[0-9]*\).*/\1/g')
 			# Check to see if dynamic ip has changed 
 			if [ "$OUT_IP1" = "$OUT_IP2" ]
 				then

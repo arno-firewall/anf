@@ -73,7 +73,7 @@ AWK_BIN=""
 # Note that we use `"$@"' to let each command-line parameter expand to a
 # separate word. The quotes around `$@' are essential!
 # We need CLOPTS as the `eval set --' would nuke the return value of getopt.
-CLOPTS=`getopt -o h,r,o,l,c,s --long help,no-resolve,html-output,no-locations,no-colors,single-line -n 'arno-fwfilter' -- "$@"`
+CLOPTS=$(getopt -o h,r,o,l,c,s --long help,no-resolve,html-output,no-locations,no-colors,single-line -n 'arno-fwfilter' -- "$@")
 
 if [ $? != 0 ] ; then
   echo "Terminating..." >&2
@@ -128,7 +128,7 @@ if [ -z "$AWK_BIN" ]; then
   echo "You may want to configure it yourself inside this script."
 else
   # Test what awk version is used (gawk, mawk etc...)
-  test=`$AWK_BIN -W version 2>/dev/null |grep -i mawk`
+  test=$($AWK_BIN -W version 2>/dev/null |grep -i mawk)
   if [ -n "$test" ]; then
     # AWK_BIN=$(echo "$AWK_BIN -W interactive")
     echo "The configured AWK binary is MAWK, which does not work with the script. Please use GAWK instead"

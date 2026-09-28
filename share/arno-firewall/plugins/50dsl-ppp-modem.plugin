@@ -95,7 +95,7 @@ plugin_start()
   if [ -n "$MODEM_IP" -a -n "$MODEM_INTERNAL_NET" ]; then
     echo "${INDENT}Enabling (ADSL) modem (@$MODEM_IP) management for hosts(s): $MODEM_INTERNAL_NET"
     IFS=' ,'
-    for net in `nft_hosts "$MODEM_INTERNAL_NET"`; do
+    for net in $(nft_hosts "$MODEM_INTERNAL_NET"); do
       nft_rule FORWARD "meta nfproto ipv4 $(nft_if oifname $MODEM_IF) $(nft_addr saddr $net) accept"
       nft_rule POSTROUTING "meta nfproto ipv4 $(nft_if oifname $MODEM_IF) $(nft_addr saddr $net) $(nft_addr daddr $MODEM_IP) masquerade"
     done

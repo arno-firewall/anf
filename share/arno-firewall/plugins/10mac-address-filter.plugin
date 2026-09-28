@@ -84,7 +84,7 @@ plugin_start()
 
 IFS='
 '
-  for LINE in `cat "$MAC_ADDRESS_FILE" |sed -e 's|#.*||' -e 's| *$||'`; do
+  for LINE in $(cat "$MAC_ADDRESS_FILE" |sed -e 's|#.*||' -e 's| *$||'); do
     if [ -n "$LINE" ]; then
       src_mac="$(echo "$LINE" |awk '{ print $1 }')"
       src_ip="$(echo "$LINE" |awk '{ print $2 }')"

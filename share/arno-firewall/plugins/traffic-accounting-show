@@ -37,7 +37,7 @@ fi
 echo "Bytes input:"
 echo "-------------"
 IFS=$EOL
-for LINE in `cat "$LOG_FILE" |sort -n --key=3 --reverse`; do
+for LINE in $(cat "$LOG_FILE" |sort -n --key=3 --reverse); do
   hostname="$(echo "$LINE" |cut -s -d' ' -f1)"
   ip="$(echo "$LINE" |cut -s -d' ' -f2)"
   size="$(echo "$LINE" |cut -s -d' ' -f3)"
@@ -62,7 +62,7 @@ echo ""
 echo "Bytes output:"
 echo "-------------"
 IFS=$EOL
-for LINE in `cat "$LOG_FILE" |sort -n --key=4 --reverse`; do
+for LINE in $(cat "$LOG_FILE" |sort -n --key=4 --reverse); do
   hostname="$(echo "$LINE" |cut -s -d' ' -f1)"
   ip="$(echo "$LINE" |cut -s -d' ' -f2)"
   size="$(echo "$LINE" |cut -s -d' ' -f4)"

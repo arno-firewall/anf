@@ -63,7 +63,7 @@ if [ "$VERBOSE" = "0" ]; then
   esac
 
   # Call firewall script:
-  result=`$PROGRAM $*`
+  result=$($PROGRAM $*)
   retval=$?
 else
   $PROGRAM $*
