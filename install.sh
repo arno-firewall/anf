@@ -359,7 +359,16 @@ migrate_iptables_version()
   # Take over its configuration, with its paths pointing to the new locations
   if [ $old_conf -eq 1 ]; then
     if get_user_yn "Migrate its configuration from $OLD_ETC/ to /etc/arno-firewall/" "y"; then
-      cp -a "$OLD_ETC" /etc/arno-firewall || return 1
+      # Copy the contents (so this also works when $OLD_ETC is a symlink itself)
+      mkdir /etc/arno-firewall && cp -a "$OLD_ETC/." /etc/arno-firewall/ || return 1
+
+      # Symlinks pointing into the old directory now point to the same file in the new one
+      find /etc/arno-firewall -type l |while read link; do
+        case "$(readlink "$link")" in
+          "$OLD_ETC"/*) ln -sfn "/etc/arno-firewall/$(readlink "$link" |cut -c$((${#OLD_ETC} + 2))-)" "$link" ;;
+        esac
+      done
+
       # Rename paths, commands and the name (but keep the GitHub URLs)
       grep -rl -e 'arno-iptables-firewall' -e "Arno's Iptables Firewall" /etc/arno-firewall |xargs -r \
         sed -i -e 's#arno-iptables-firewall#arno-firewall#g' \
@@ -567,8 +576,9 @@ rm -f /usr/local/sbin/arno-fwfilter
 mkdir -pv /usr/local/share/arno-firewall/plugins || exit 1
 copy_overwrite ./share/arno-firewall/ /usr/local/share/arno-firewall/
 
-if [ ! -f /usr/local/sbin/traffic-accounting-show ]; then 
-  ln -sv /usr/local/share/arno-firewall/plugins/traffic-accounting-show /usr/local/sbin/traffic-accounting-show
+# Shared with the iptables version, it always points to the version installed last
+if [ "$(readlink /usr/local/sbin/traffic-accounting-show)" != "/usr/local/share/arno-firewall/plugins/traffic-accounting-show" ]; then
+  ln -sfnv /usr/local/share/arno-firewall/plugins/traffic-accounting-show /usr/local/sbin/traffic-accounting-show
 fi
 
 mkdir -pv /usr/local/share/man/man1 || exit 1

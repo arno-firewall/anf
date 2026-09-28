@@ -103,8 +103,13 @@ if nft list table inet aif >/dev/null 2>&1 && ! nft list chain inet aif BASE_INP
 fi
 
 rm -fv /usr/local/sbin/arno-firewall
+# Shared with the iptables version: point it back to that one when it's still installed
 if readlink /usr/local/sbin/traffic-accounting-show |grep -q '/arno-firewall/'; then
-  rm -fv /usr/local/sbin/traffic-accounting-show
+  if [ -f /usr/local/share/arno-iptables-firewall/plugins/traffic-accounting-show ]; then
+    ln -sfnv /usr/local/share/arno-iptables-firewall/plugins/traffic-accounting-show /usr/local/sbin/traffic-accounting-show
+  else
+    rm -fv /usr/local/sbin/traffic-accounting-show
+  fi
 fi
 
 # arno-fwfilter is shared with the iptables version, keep it while that one is installed
