@@ -58,8 +58,8 @@ plugin_start()
   # Don't apply the usual filters for the external interface on
   # traffic that's just been decapulated.  We treat it mostly like
   # internal traffic.
-  # iptables -A EXT_INPUT_CHAIN -m policy --pol ipsec --dir in -j VPN_INPUT
-  # (unnecessary since the -A INPUT...-j VPN_INPUT rule below supersedes this rule)
+  # nft_rule EXT_INPUT_CHAIN "meta ipsec exists jump VPN_INPUT"
+  # (unnecessary since the INPUT ... jump VPN_INPUT rule below supersedes this rule)
 
   echo "${INDENT}Allowing internet hosts $IPSEC_ALLOWED_HOSTS to access the VPN service"
   IFS=' ,'

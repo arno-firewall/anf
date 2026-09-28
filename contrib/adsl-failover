@@ -15,7 +15,7 @@
 # You can set this script in the system cron to check the connection at regular time intervals.
 #
 # METHODS USED IN THIS SCRIPT
-# We have both eth1 and ppp0 as external interfaces in iptables, if both were functioning at the same time
+# We have both eth1 and ppp0 as external interfaces in the firewall, if both were functioning at the same time
 # we would have load balancing (which could get expensive), but here we only need one active connection so
 # all we need to do is to adjust the dynamic IP address of the dialup connection in the firwall when there
 # is a problem in order to allow routing through the dialup device. Once the emergency is over we can can-

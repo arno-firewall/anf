@@ -61,10 +61,7 @@ plugin_stop()
 {
   if [ "$NAT" = "1" ]; then
     if [ -e /proc/modules -a -x "$MODPROBE" ]; then
-      if ! $MODPROBE -r nf_nat_pptp >/dev/null 2>&1; then
-        $MODPROBE -r ip_nat_pptp >/dev/null 2>&1
-      fi
-      if [ $? -eq 0 ]; then
+      if $MODPROBE -r nf_nat_pptp >/dev/null 2>&1; then
         echo "${INDENT}Disabled PPTP NAT helper module"
       fi
     fi

@@ -59,10 +59,6 @@ traffic_accounting_init()
 # Plugin start function
 plugin_start()
 {
-  # Enable Conntrack Accounting (kernel config CONFIG_NF_CT_ACCT)
-  # CONFIG_NF_CT_ACCT is deprecated and will be removed sometime after kernel 2.6.27
-  sysctl net.netfilter.nf_conntrack_acct=1 2>/dev/null
-
   # Create new chains
   nft_chain ACCOUNTING_INPUT_CHAIN
   nft_chain ACCOUNTING_OUTPUT_CHAIN

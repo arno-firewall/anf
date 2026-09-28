@@ -34,8 +34,6 @@ PLUGIN_CONF_FILE="mac-address-filter.conf"
 # Plugin start function
 plugin_start()
 {
-  # Probe module ipt_recent (Allows checking for recent packets):
-
   # Create new chains
   nft_chain MAC_FILTER_HOOK
   nft_chain MAC_FILTER
@@ -54,8 +52,8 @@ plugin_start()
     nft_rule MAC_FILTER "ip6 daddr ff02::1 return"
   fi
 
-  #iptables -A MAC_FILTER -m pkttype --pkt-type ! unicast -j RETURN
-  #iptables -A MAC_FILTER -m addrtype --dst-type BROADCAST -j RETURN
+  #nft_rule MAC_FILTER "meta pkttype != unicast return"
+  #nft_rule MAC_FILTER "fib daddr type broadcast return"
   if [ -n "$INT_NET_BCAST_ADDRESS" ]; then
     IFS=' ,'
     for address in $INT_NET_BCAST_ADDRESS; do
@@ -131,7 +129,7 @@ plugin_stop()
 # Plugin status function
 plugin_status()
 {
-#  iptables -xnvL MAC_FILTER |sed -e "s/^/$INDENT/"
+#  $NFT list chain inet $NFT_TABLE MAC_FILTER |sed -e "s/^/$INDENT/"
   return 0
 }
 

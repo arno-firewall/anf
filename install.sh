@@ -48,11 +48,6 @@ sanity_check()
     exit 1
   fi
 
-  check_command_error iptables
-  if [ "$IPV6_DETECTED" = "1" ]; then
-    check_command_error ip6tables
-  fi
-
   # Used by the main script/plugins:
   check_command_error nft
   check_command_error modprobe
