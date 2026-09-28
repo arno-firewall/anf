@@ -1961,9 +1961,9 @@ JOBS_FILE="/var/tmp/anf_jobs"
 JOBS_LOCK_NAME="jobs"
 
 # Jobs process (file) name
-JOB_PROCESSOR="$USR_SHARE_PATH/aif-job-processor"
+JOB_PROCESSOR="$USR_SHARE_PATH/anf-job-processor"
 
-JOB_EXECUTER="$USR_SHARE_PATH/aif-job-execute"
+JOB_EXECUTER="$USR_SHARE_PATH/anf-job-execute"
 
 # Check plugin bin path and fallback in case it's empty
 #######################################################
