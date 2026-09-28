@@ -271,6 +271,11 @@ nft_rule()
     *" ip "[sd]"addr "*" icmpv6 type "*|*" ip6 "[sd]"addr "*" icmp type "*) return 0 ;;
   esac
 
+  # Tag the rule with its source (config variable or plugin), shows in errors and listings
+  if [ -n "$NFT_COMMENT" ]; then
+    rule="$rule comment \"$NFT_COMMENT\""
+  fi
+
   printf '%s rule inet %s %s %s\n' "${NFT_OP:-add}" "$NFT_TABLE" "$chain" "$rule" >>"$NFT_BATCH"
 }
 

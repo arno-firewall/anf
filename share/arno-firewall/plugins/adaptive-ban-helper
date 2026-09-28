@@ -2,6 +2,9 @@
 ###############################
 PLUGIN_CONF_FILE="adaptive-ban.conf"
 
+# Rules added by this helper are tagged with the plugin name
+NFT_COMMENT="adaptive-ban"
+
 # Preinit return value for success
 PLUGIN_RET_VAL=0
 

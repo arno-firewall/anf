@@ -2,6 +2,9 @@
 ###############################
 PLUGIN_CONF_FILE="traffic-accounting.conf"
 
+# Rules added by this helper are tagged with the plugin name
+NFT_COMMENT="traffic-accounting"
+
 # Preinit return value for success
 PLUGIN_RET_VAL=0
 

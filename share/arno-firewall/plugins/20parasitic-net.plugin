@@ -172,19 +172,19 @@ plugin_status()
 {
   echo "  Interface forward policy:"
   echo "  =============================="
-  $NFT list chain inet $NFT_TABLE POST_FORWARD_CHAIN | sed -n -e 's/^[[:space:]]*\(.*jump PARASITIC_NET_FORWARD\)$/  \1/p'
+  $NFT list chain inet $NFT_TABLE POST_FORWARD_CHAIN | sed -n -r -e 's/^[[:space:]]*(.*jump PARASITIC_NET_FORWARD)( comment ".*")?$/  \1/p'
   echo "  ------------------------------"
   echo ""
 
   echo "  Allowed client host(s):"
   echo "  =============================="
-  $NFT list chain inet $NFT_TABLE PARASITIC_NET_FORWARD | sed -n -e 's/^.* saddr \([^ ]*\) jump PARASITIC_NET_ACL$/  \1/p'
+  $NFT list chain inet $NFT_TABLE PARASITIC_NET_FORWARD | sed -n -r -e 's/^.* saddr ([^ ]*) jump PARASITIC_NET_ACL( comment ".*")?$/  \1/p'
   echo "  ------------------------------"
   echo ""
 
   echo "  Access Control List(ACL):"
   echo "  =============================="
-  $NFT list chain inet $NFT_TABLE PARASITIC_NET_ACL | sed -n -r -e 's/^[[:space:]]*(.*(accept|drop|reject))$/  \1/p'
+  $NFT list chain inet $NFT_TABLE PARASITIC_NET_ACL | sed -n -r -e 's/^[[:space:]]*(.*(accept|drop|reject))( comment ".*")?$/  \1/p'
   echo "  ------------------------------"
   echo ""
 
