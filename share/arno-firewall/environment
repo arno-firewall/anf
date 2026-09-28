@@ -203,9 +203,11 @@ lc()
 ################################################################################
 # nftables ruleset construction
 #
-# All chains and rules are collected in $NFT_BATCH and loaded by nft_commit in
+# All chains and rules are collected in $NFT_BATCH_FILE and loaded by nft_commit in
 # one atomic transaction. If nft rejects anything, nothing is applied and the
 # previously active ruleset stays in place.
+# With NFT_BATCH=0 every command is executed directly instead, except the
+# elements of the blocked hosts sets, which are always loaded by nft_commit.
 ################################################################################
 NFT_TABLE="aif"
 
@@ -214,13 +216,35 @@ NFT_TABLE="aif"
 # changes the running table (eg. to reload the blocked hosts)
 nft_begin()
 {
-  NFT_BATCH="$(mktemp /tmp/aif-nft.XXXXXX)" || return 1
+  NFT_BATCH_FILE="$(mktemp /tmp/aif-nft.XXXXXX)" || return 1
 
   # Create-then-delete clears only our own table, so tables owned by others
   # (docker, libvirt, fail2ban, ...) are left alone
   if [ "$1" != "update" ]; then
-    printf 'table inet %s\ndelete table inet %s\ntable inet %s\n' \
-      "$NFT_TABLE" "$NFT_TABLE" "$NFT_TABLE" >"$NFT_BATCH"
+    if [ "$NFT_BATCH" = "0" ]; then
+      $NFT delete table inet $NFT_TABLE 2>/dev/null
+      $NFT add table inet $NFT_TABLE
+    else
+      printf 'table inet %s\ndelete table inet %s\ntable inet %s\n' \
+        "$NFT_TABLE" "$NFT_TABLE" "$NFT_TABLE" >"$NFT_BATCH_FILE"
+    fi
+  fi
+}
+
+
+# Usage: nft_run "nft command"
+# Adds the command to the batch, or with NFT_BATCH=0 executes it directly
+nft_run()
+{
+  local err_result
+
+  if [ "$NFT_BATCH" = "0" ]; then
+    if ! err_result="$($NFT "$1" 2>&1)"; then
+      printf "\033[40m\033[1;31m%s\n\033[0m" "$err_result" >&2
+      RULE_WARNING=$((RULE_WARNING + 1))
+    fi
+  else
+    printf '%s\n' "$1" >>"$NFT_BATCH_FILE"
   fi
 }
 
@@ -229,7 +253,11 @@ nft_begin()
 # Adds any other nft command (sets, elements, ct helpers, ...) to the batch
 nft_cmd()
 {
-  printf '%s\n' "$*" >>"$NFT_BATCH"
+  # Set elements (the blocked hosts) are always batched
+  case $* in
+    "add element "*) printf '%s\n' "$*" >>"$NFT_BATCH_FILE" ;;
+                  *) nft_run "$*" ;;
+  esac
 }
 
 
@@ -237,9 +265,9 @@ nft_cmd()
 nft_chain()
 {
   if [ -n "$2" ]; then
-    printf 'add chain inet %s %s { %s }\n' "$NFT_TABLE" "$1" "$2" >>"$NFT_BATCH"
+    nft_run "add chain inet $NFT_TABLE $1 { $2 }"
   else
-    printf 'add chain inet %s %s\n' "$NFT_TABLE" "$1" >>"$NFT_BATCH"
+    nft_run "add chain inet $NFT_TABLE $1"
   fi
 }
 
@@ -276,7 +304,7 @@ nft_rule()
     rule="$rule comment \"$NFT_COMMENT\""
   fi
 
-  printf '%s rule inet %s %s %s\n' "${NFT_OP:-add}" "$NFT_TABLE" "$chain" "$rule" >>"$NFT_BATCH"
+  nft_run "${NFT_OP:-add} rule inet $NFT_TABLE $chain $rule"
 }
 
 
@@ -371,9 +399,9 @@ nft_commit()
 
   # Like the old per-rule iptables calls, a rejected rule is reported and
   # skipped while everything else is loaded. The load itself stays atomic.
-  while err_result="$($NFT -c -f "$NFT_BATCH" 2>&1)"; [ -n "$err_result" ] && [ $pass -lt 20 ]; do
+  while err_result="$($NFT -c -f "$NFT_BATCH_FILE" 2>&1)"; [ -n "$err_result" ] && [ $pass -lt 20 ]; do
     pass=$((pass + 1))
-    bad_lines="$(echo "$err_result" |sed -n -r -e "s!^$NFT_BATCH:([0-9]+):.*!\1!p" |sort -un |tr '\n' ' ')"
+    bad_lines="$(echo "$err_result" |sed -n -r -e "s!^$NFT_BATCH_FILE:([0-9]+):.*!\1!p" |sort -un |tr '\n' ' ')"
     if [ -z "$bad_lines" ]; then
       break
     fi
@@ -381,7 +409,7 @@ nft_commit()
     printf "\033[40m\033[1;31m%s\n\033[0m" "$err_result" >&2
     for line in $bad_lines; do
       # Only individual rules/elements may be skipped, a broken chain or set definition is fatal
-      if ! sed -n "${line}p" "$NFT_BATCH" |grep -q -e '^add rule ' -e '^insert rule ' -e '^add element '; then
+      if ! sed -n "${line}p" "$NFT_BATCH_FILE" |grep -q -e '^add rule ' -e '^insert rule ' -e '^add element '; then
         bad_lines=""
         break
       fi
@@ -390,17 +418,17 @@ nft_commit()
     if [ -z "$bad_lines" ]; then
       break
     fi
-    awk -v bad=" $bad_lines" 'index(bad, " " NR " ") == 0' "$NFT_BATCH" >"$NFT_BATCH.new" && mv "$NFT_BATCH.new" "$NFT_BATCH"
+    awk -v bad=" $bad_lines" 'index(bad, " " NR " ") == 0' "$NFT_BATCH_FILE" >"$NFT_BATCH_FILE.new" && mv "$NFT_BATCH_FILE.new" "$NFT_BATCH_FILE"
   done
 
-  err_result="$($NFT -f "$NFT_BATCH" 2>&1)"
+  err_result="$($NFT -f "$NFT_BATCH_FILE" 2>&1)"
   retval=$?
 
   if [ $retval -ne 0 ]; then
     printf "\033[40m\033[1;31mERROR: nft rejected the ruleset, previous ruleset left in place:\n%s\n\033[0m" "$err_result" >&2
-    echo "Rejected ruleset kept as $NFT_BATCH" >&2
+    echo "Rejected ruleset kept as $NFT_BATCH_FILE" >&2
   else
-    rm -f "$NFT_BATCH"
+    rm -f "$NFT_BATCH_FILE"
   fi
 
   return $retval

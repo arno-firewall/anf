@@ -4400,9 +4400,9 @@ setup_hostblock_chain()
 
       printf "Loading Set: ${netset##*/} ... "
       if [ "$type" = "ipv4_addr" ]; then
-        sed -n -r -e "s/^([0-9][0-9./]+)([[:space:]].*|)$/add element inet $NFT_TABLE $set_name { \1 }/p" "$netset" >>"$NFT_BATCH"
+        sed -n -r -e "s/^([0-9][0-9./]+)([[:space:]].*|)$/add element inet $NFT_TABLE $set_name { \1 }/p" "$netset" >>"$NFT_BATCH_FILE"
       else
-        sed -n -r -e "s/^([0-9a-fA-F][0-9a-fA-F:/]+)([[:space:]].*|)$/add element inet $NFT_TABLE $set_name { \1 }/p" "$netset" >>"$NFT_BATCH"
+        sed -n -r -e "s/^([0-9a-fA-F][0-9a-fA-F:/]+)([[:space:]].*|)$/add element inet $NFT_TABLE $set_name { \1 }/p" "$netset" >>"$NFT_BATCH_FILE"
       fi
       echo "Done."
     done
