@@ -371,7 +371,7 @@ migrate_iptables_version()
 
   # It stays installed (both versions can be used side by side), but shouldn't
   # start at boot as well
-  if [ $old_enabled -eq 1 ] && get_user_yn "Disable the service of the iptables version at boot (it stays installed, both would start at boot otherwise)" "y"; then
+  if [ $old_enabled -eq 1 ] && get_user_yn "Disable the service of the iptables version at boot (both would start at boot otherwise)" "y"; then
     if check_command systemctl; then
       systemctl disable arno-iptables-firewall 2>/dev/null
     fi
@@ -382,6 +382,34 @@ migrate_iptables_version()
     fi
     echo "* Disabled the service of the iptables version at boot, re-enable it with eg."
     echo "  \"systemctl enable arno-iptables-firewall\" (and disable arno-firewall)"
+  fi
+
+  # Optionally remove it completely (by default both versions stay installed)
+  if [ $old_prog -eq 1 ] && get_user_yn "Remove the program files of the iptables version (not needed, both versions can stay installed)" "n"; then
+    if check_command systemctl; then
+      systemctl disable arno-iptables-firewall 2>/dev/null
+    fi
+    if check_command update-rc.d; then
+      update-rc.d -f arno-iptables-firewall remove
+    elif check_command chkconfig; then
+      chkconfig --del arno-iptables-firewall
+    fi
+
+    rm -fv /etc/init.d/arno-iptables-firewall
+    rm -fv /etc/rc.d/rc*.d/*arno-iptables-firewall
+    rm -fv /etc/rc*.d/*arno-iptables-firewall
+    rm -fv /usr/lib/systemd/system/arno-iptables-firewall.service
+    rm -fv /lib/systemd/system/arno-iptables-firewall.service
+    rm -fv /etc/systemd/system/arno-iptables-firewall.service
+    rm -fv /usr/local/sbin/arno-iptables-firewall
+    if readlink /usr/local/sbin/traffic-accounting-show |grep -q '/arno-iptables-firewall/'; then
+      rm -fv /usr/local/sbin/traffic-accounting-show
+    fi
+    rm -rf /usr/local/share/arno-iptables-firewall && echo "removed directory '/usr/local/share/arno-iptables-firewall'"
+    rm -fv /usr/local/share/man/man8/arno-iptables-firewall.8.gz
+    rm -rf /usr/local/share/doc/arno-iptables-firewall && echo "removed directory '/usr/local/share/doc/arno-iptables-firewall'"
+    rm -fv /etc/logrotate.d/arno-iptables-firewall
+    rm -fv /etc/rsyslog.d/arno-iptables-firewall.conf
   fi
 
   return 0
