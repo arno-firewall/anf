@@ -331,6 +331,11 @@ migrate_iptables_version()
     old_prog=1
   fi
 
+  # Any trace of the iptables version allows resetting its left over policies later on
+  if [ $old_prog -eq 1 -o -d "$OLD_ETC" ]; then
+    IPTABLES_VERSION_FOUND=1
+  fi
+
   if [ $old_conf -eq 0 -a $old_prog -eq 0 ]; then
     return 0
   fi
@@ -382,13 +387,20 @@ migrate_iptables_version()
 }
 
 
-# Remove the rules of a running iptables version (only call once this version is running)
+# Remove the rules of the iptables version (only call once this version is running).
+# A stopped iptables version leaves no rules, but a FORWARD policy of DROP, which
+# is reset as well when the iptables version was found and iptables holds no rules
+# at all (so nothing else uses it)
 flush_iptables_version()
 {
   local cmd table
 
   for cmd in iptables ip6tables; do
-    if check_command $cmd && $cmd -n -L BASE_INPUT_CHAIN >/dev/null 2>&1; then
+    if ! check_command $cmd; then
+      continue
+    fi
+
+    if $cmd -n -L BASE_INPUT_CHAIN >/dev/null 2>&1; then
       for table in filter nat mangle raw; do
         $cmd -t $table -F 2>/dev/null
         $cmd -t $table -X 2>/dev/null
@@ -397,6 +409,12 @@ flush_iptables_version()
       $cmd -P FORWARD ACCEPT
       $cmd -P OUTPUT ACCEPT
       echo "* Removed the rules of the iptables version ($cmd)"
+    elif [ "$IPTABLES_VERSION_FOUND" = "1" ] && ! $cmd-save 2>/dev/null |grep -q '^-A' &&
+         $cmd-save 2>/dev/null |grep -q '^:[A-Z]* DROP '; then
+      $cmd -P INPUT ACCEPT
+      $cmd -P FORWARD ACCEPT
+      $cmd -P OUTPUT ACCEPT
+      echo "* Reset the DROP policies left behind by the (stopped) iptables version ($cmd)"
     fi
   done
 }
@@ -405,7 +423,11 @@ flush_iptables_version()
 # Check if rules of the iptables version are (still) loaded
 iptables_version_running()
 {
-  check_command iptables && iptables -n -L BASE_INPUT_CHAIN >/dev/null 2>&1
+  check_command iptables || return 1
+
+  iptables -n -L BASE_INPUT_CHAIN >/dev/null 2>&1 ||
+    { [ "$IPTABLES_VERSION_FOUND" = "1" ] && ! iptables-save 2>/dev/null |grep -q '^-A' &&
+      iptables-save 2>/dev/null |grep -q '^:[A-Z]* DROP '; }
 }
 
 # Check plugins for (old) versions with different priority
@@ -613,9 +635,9 @@ fi
 
 if iptables_version_running; then
   echo ""
-  echo "NOTE: The rules of the iptables version are still active. They disappear at"
-  echo "      the next reboot (if its service was removed), or rerun this install"
-  echo "      script and choose to (re)start the firewall."
+  echo "NOTE: The rules (or DROP policies) of the iptables version are still active."
+  echo "      They disappear at the next reboot (if its service was removed), or rerun"
+  echo "      this install script and choose to (re)start the firewall."
 fi
 
 exit 0

@@ -5401,6 +5401,24 @@ setup_firewall_rules()
     fi
     return 1
   fi
+
+  check_foreign_drop_policies
+}
+
+
+# Warn about base chains in tables of others (eg. left behind by iptables) with a
+# DROP policy, they also drop traffic that this firewall accepts
+check_foreign_drop_policies()
+{
+  $NFT list chains 2>/dev/null |awk -v own="inet $NFT_TABLE" '
+    $1 == "table" { table = $2 " " $3 }
+    $1 == "chain" { chain = $2 }
+    table != own && /hook (input|forward|output) / && /policy drop;/ {
+      match($0, /hook [a-z]+/); print table "|" chain "|" substr($0, RSTART + 5, RLENGTH - 5)
+    }' |while IFS='|' read table chain hook; do
+    printf "\033[40m\033[1;31mWARNING: Table \"$table\" has DROP policy on chain $chain ($hook hook), this also drops\n" >&2
+    printf "         traffic this firewall accepts! Check it with \"nft list table $table\".\033[0m\n" >&2
+  done
 }
 
 
