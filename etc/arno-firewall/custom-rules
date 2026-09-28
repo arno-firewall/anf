@@ -1,2 +1,2 @@
-# Put any custom (iptables) rules here down below:
-##################################################
+# Put any custom (nft) rules/commands here down below:
+######################################################

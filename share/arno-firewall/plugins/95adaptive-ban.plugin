@@ -1,12 +1,12 @@
 # ------------------------------------------------------------------------------
-#            -= Arno's (NFT) Firewall(AIF) - Adaptive Ban plugin =-
+#            -= Arno's (NFT) Firewall(ANF) - Adaptive Ban plugin =-
 #
 PLUGIN_NAME="Adaptive Ban plugin"
 PLUGIN_VERSION="1.04 BETA"
 PLUGIN_CONF_FILE="adaptive-ban.conf"
 #
 # Last changed          : February 3, 2019
-# Requirements          : AIF 2.1.0 (or newer)
+# Requirements          : ANF 3.0.0 (or newer)
 # Comments              : Parse a log file for failed access with offending IP addresses
 #                         Ban the IP address after multiple failed attempts
 #
@@ -16,7 +16,7 @@ PLUGIN_CONF_FILE="adaptive-ban.conf"
 # Credits               : Fail2ban Project
 # Homepage              : https://www.fail2ban.org/
 # Credits               : Arno van Amersfoort
-# Web                   : https://github.com/arno-iptables-firewall/aif
+# Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .
 #                         at the proper locations!)
@@ -47,7 +47,7 @@ plugin_start()
   local host net IFS
 
   nft_chain ADAPTIVE_BAN_DROP_CHAIN
-  nft_rule ADAPTIVE_BAN_DROP_CHAIN "limit rate 1/hour burst 1 packets log prefix \"AIF:Adaptive-Ban host: \" level $LOGLEVEL"
+  nft_rule ADAPTIVE_BAN_DROP_CHAIN "limit rate 1/hour burst 1 packets log prefix \"ANF:Adaptive-Ban host: \" level $LOGLEVEL"
   if [ "$ADAPTIVE_BAN_REJECT" = "1" ]; then
     nft_rule ADAPTIVE_BAN_DROP_CHAIN "reject with icmpx type host-unreachable"
   else

@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # chkconfig: 2345 09 91
-# description: init.d script for Arno's (NFT) Firewall(AIF)
+# description: init.d script for Arno's (NFT) Firewall(ANF)
 
 ### BEGIN INIT INFO
 # Provides:          arno-firewall
@@ -9,15 +9,15 @@
 # Required-Stop:     $local_fs $remote_fs $network
 # Default-Start:     S
 # Default-Stop:      0 6
-# Short-Description: Setup iptables firewall configuration
+# Short-Description: Setup firewall configuration
 ### END INIT INFO
 
 ############################################################################################
 # You should put this script in eg. "/etc/init.d/" .                                       #
 # Furthermore make sure it's executable! -> "chmod 700" or "chmod +x" it                   #
 # If you want to run it upon boot, either add an entry in your "/etc/rc.d/rc.local" or 	   #
-# (for eg. Debian) in "/etc/rcS.d/" create a symlink to the arno-firewall script  #
-# ("ln -s /etc/init.d/arno-firewall script S99-arno-firewall script").   #
+# (for eg. Debian) in "/etc/rcS.d/" create a symlink to the arno-firewall script           #
+# ("ln -s /etc/init.d/arno-firewall script S99-arno-firewall script").                     #
 ############################################################################################
 
 PATH=/bin:/usr/bin:/sbin:/usr/sbin
@@ -31,19 +31,19 @@ test -x $PROGRAM || exit 0
 if [ "$VERBOSE" = "0" ]; then
   case "$1" in
     start)
-      echo "Starting Arno's (NFT) Firewall(AIF)..."
+      echo "Starting Arno's (NFT) Firewall(ANF)..."
     ;;
 
     stop)
-      echo "Stopping Arno's (NFT) Firewall(AIF)..."
+      echo "Stopping Arno's (NFT) Firewall(ANF)..."
     ;;
 
     restart)
-      echo "Restarting Arno's (NFT) Firewall(AIF)..."
+      echo "Restarting Arno's (NFT) Firewall(ANF)..."
     ;;
 
     force-reload)
-      echo "(Forced) reloading Arno's (NFT) Firewall(AIF)..."
+      echo "(Forced) reloading Arno's (NFT) Firewall(ANF)..."
     ;;
 
     status)

@@ -1,11 +1,11 @@
 # ------------------------------------------------------------------------------
-#                         -= Arno's (NFT) Firewall(AIF) =-
-#              Single- & multi-homed firewall script with DSL/ADSL support
+#                         -= Arno's (NFT) Firewall(ANF) =-
+#                       Single- & multi-homed firewall script
 #
 #                           ~ In memory of my dear parents ~
 #
-# (C) Copyright 2001-2024 by Arno van Amersfoort & Lonnie Abelbeck
-# Web                   : https://github.com/arno-iptables-firewall/aif
+# (C) Copyright 2001-2026 by Arno van Amersfoort & Lonnie Abelbeck
+# Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .
 #                         at the proper locations!)
@@ -245,14 +245,14 @@ lc()
 # With NFT_BATCH=0 every command is executed directly instead, except the
 # elements of the blocked hosts sets, which are always loaded by nft_commit.
 ################################################################################
-NFT_TABLE="aif"
+NFT_TABLE="anf"
 
 # Usage: nft_begin [update]
 # Without "update" the batch replaces our whole table, with "update" it only
 # changes the running table (eg. to reload the blocked hosts)
 nft_begin()
 {
-  NFT_BATCH_FILE="$(mktemp /tmp/aif-nft.XXXXXX)" || return 1
+  NFT_BATCH_FILE="$(mktemp /tmp/anf-nft.XXXXXX)" || return 1
 
   # Create-then-delete clears only our own table, so tables owned by others
   # (docker, libvirt, fail2ban, ...) are left alone
@@ -1986,7 +1986,7 @@ if [ -z "$PLUGIN_BIN_PATH" ]; then
 fi
 
 # File containing (background) jobs to run
-JOBS_FILE="/var/tmp/aif_jobs"
+JOBS_FILE="/var/tmp/anf_jobs"
 
 # Lock file for accessing the JOBS_FILE
 JOBS_LOCK_NAME="jobs"

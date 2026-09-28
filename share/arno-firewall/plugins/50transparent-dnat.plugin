@@ -1,12 +1,12 @@
 # ------------------------------------------------------------------------------
-#         -= Arno's (NFT) Firewall(AIF) - Transparent DNAT plugin =-
+#         -= Arno's (NFT) Firewall(ANF) - Transparent DNAT plugin =-
 #
 PLUGIN_NAME="Transparent DNAT plugin"
 PLUGIN_VERSION="0.31BETA (EXPERIMENTAL!)"
 PLUGIN_CONF_FILE="transparent-dnat.conf"
 #
 # Last changed          : July 31, 2015
-# Requirements          : kernel 2.6 + ip_nat + iptable_nat
+# Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This plugin enables transparent DNAT for internal hosts for
 #                         certain ports. Meaning you can redirect certain TCP/UDP ports (eg. http)
 #                         which should be redirected from a certain INET address to an
@@ -14,7 +14,7 @@ PLUGIN_CONF_FILE="transparent-dnat.conf"
 #
 # Author                : (C) Copyright 2007-2009 by Arno van Amersfoort
 # Credits               : Rok Potocnik for his initial idea
-# Web                   : https://github.com/arno-iptables-firewall/aif
+# Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .
 #                         at the proper locations!)

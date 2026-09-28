@@ -1,18 +1,18 @@
 # ------------------------------------------------------------------------------
-#        -= Arno's (NFT) Firewall(AIF) - MAC Address Filter plugin =-
+#        -= Arno's (NFT) Firewall(ANF) - MAC Address Filter plugin =-
 #
 PLUGIN_NAME="MAC Address Filter plugin"
 PLUGIN_VERSION="1.1b"
 PLUGIN_CONF_FILE="mac-address-filter.conf"
 #
 # Last changed          : July 21, 2015
-# Requirements          : ipt_mac module
+# Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This plugin allows you to select the MAC addresses
 #                         that are allowed access for the specified interfaces
 #                         (eg. INT_IF)
 #
 # Author                : (C) Copyright 2010-2015 by Arno van Amersfoort
-# Web                   : https://github.com/arno-iptables-firewall/aif
+# Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .
 #                         at the proper locations!)
@@ -99,7 +99,7 @@ IFS='
   done
 
   if [ "$MAC_ADDRESS_LOG" = "1" ]; then
-    nft_rule MAC_FILTER "limit rate 3/minute burst 5 packets log prefix \"AIF:MAC address dropped: \" level $LOGLEVEL"
+    nft_rule MAC_FILTER "limit rate 3/minute burst 5 packets log prefix \"ANF:MAC address dropped: \" level $LOGLEVEL"
   fi
 
 

@@ -1,16 +1,16 @@
 # ------------------------------------------------------------------------------
-#         -= Arno's (NFT) Firewall(AIF) - (A)DSL PPP Modem plugin =-
+#         -= Arno's (NFT) Firewall(ANF) - (A)DSL PPP Modem plugin =-
 #
 PLUGIN_NAME="(A)DSL PPP Modem plugin"
 PLUGIN_VERSION="1.0g"
 PLUGIN_CONF_FILE="dsl-ppp-modem.conf"
 #
 # Last changed          : October 20, 2011
-# Requirements          : aif 1.9.2i+ & kernel 2.6 & iptable_nat & ip_nat & ipt_MASQUERADE
+# Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This implements support for (A)DSL PPP modems
 #
 # Author                : (C) Copyright 2008-2011 by Arno van Amersfoort
-# Web                   : https://github.com/arno-iptables-firewall/aif
+# Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .
 #                         at the proper locations!)
@@ -39,7 +39,7 @@ plugin_start()
 
     # Anti spoof protection for the modem net
     #########################################
-    nft_rule SPOOF_CHK "meta nfproto ipv4 $(nft_if iifname $MODEM_IF !=) $(nft_addr saddr "$MODEM_IF_IP/24") limit rate 3/minute burst 5 packets log prefix \"AIF:Spoofed (MODEM) packet: \" level $LOGLEVEL"
+    nft_rule SPOOF_CHK "meta nfproto ipv4 $(nft_if iifname $MODEM_IF !=) $(nft_addr saddr "$MODEM_IF_IP/24") limit rate 3/minute burst 5 packets log prefix \"ANF:Spoofed (MODEM) packet: \" level $LOGLEVEL"
     nft_rule SPOOF_CHK "meta nfproto ipv4 $(nft_if iifname $MODEM_IF !=) $(nft_addr saddr "$MODEM_IF_IP/24") drop"
   fi
 
@@ -79,7 +79,7 @@ plugin_start()
   nft_rule MODEM_CHAIN "ip saddr 0.0.0.0 ip daddr 255.255.255.255 udp sport 68 udp dport 67 accept"
   
   # Everything else is logged & dropped
-  nft_rule MODEM_CHAIN "meta nfproto ipv4 limit rate 1/second burst 5 packets log prefix \"AIF:Dropped MODEM packet: \" level $LOGLEVEL"
+  nft_rule MODEM_CHAIN "meta nfproto ipv4 limit rate 1/second burst 5 packets log prefix \"ANF:Dropped MODEM packet: \" level $LOGLEVEL"
   nft_rule MODEM_CHAIN "meta nfproto ipv4 drop"
   
   IFS=' ,'

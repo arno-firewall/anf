@@ -1,12 +1,12 @@
 # ------------------------------------------------------------------------------
-#     -= Arno's (NFT) Firewall(AIF) - Parasitic (SNAT) Network plugin =-
+#     -= Arno's (NFT) Firewall(ANF) - Parasitic (SNAT) Network plugin =-
 #
 PLUGIN_NAME="Parasitic (SNAT) Network plugin"
 PLUGIN_VERSION="1.01"
 PLUGIN_CONF_FILE="parasitic-net.conf"
 #
 # Last changed          : Jan 16, 2020
-# Requirements          : AIF 2.1.1 (or newer)
+# Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This plugin allows "clients" on the same subnet to use this
 #                         device as a gateway upstream. This network of "clients" is
 #                         SNAT'ed to this device's external interface(s).
@@ -18,7 +18,7 @@ PLUGIN_CONF_FILE="parasitic-net.conf"
 #                         only works for IPv4, NOT IPv6
 #
 # Author                : (C) Copyright 2017-2020 by Arno van Amersfoort & Lonnie Abelbeck
-# Web                   : https://github.com/arno-iptables-firewall/aif
+# Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .
 #                         at the proper locations!)
