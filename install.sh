@@ -292,13 +292,13 @@ get_user_yn()
 
 check_18_version()
 {
-  if grep -q "^MY_VERSION=" "/etc/init.d/arno-firewall" 2>/dev/null; then
+  if grep -q "^MY_VERSION=" "/etc/init.d/arno-iptables-firewall" 2>/dev/null; then
     if get_user_yn "WARNING: An old version is still installed. Removing it first is *STRONGLY* recommended. Remove" "y"; then
-      rm -fv /etc/init.d/arno-firewall
-      mv -fv /etc/arno-firewall/custom-rules /etc/arno-firewall/custom-rules.old
-      mv -fv /etc/arno-firewall/firewall.conf /etc/arno-firewall/firewall.conf.old
-      rm -fv /etc/arno-firewall/plugins/*.plugin
-      rm -fv /etc/rc*.d/*arno-firewall
+      rm -fv /etc/init.d/arno-iptables-firewall
+      mv -fv /etc/arno-iptables-firewall/custom-rules /etc/arno-iptables-firewall/custom-rules.old
+      mv -fv /etc/arno-iptables-firewall/firewall.conf /etc/arno-iptables-firewall/firewall.conf.old
+      rm -fv /etc/arno-iptables-firewall/plugins/*.plugin
+      rm -fv /etc/rc*.d/*arno-iptables-firewall
     fi
   fi
 }
@@ -306,7 +306,7 @@ check_18_version()
 
 check_dist_version()
 {
-  if [ -f /usr/sbin/arno-firewall ]; then
+  if [ -f /usr/sbin/arno-iptables-firewall -o -f /usr/sbin/arno-firewall ]; then
     if ! get_user_yn "WARNING: It seems a distribution version is already installed. It's *STRONGLY* recommended to remove it first. Continue anyway" "n"; then
       return 1
     fi
@@ -315,6 +315,98 @@ check_dist_version()
   return 0
 }
 
+
+# Migrate an installation of the iptables version (arno-iptables-firewall)
+migrate_iptables_version()
+{
+  local OLD_ETC="/etc/arno-iptables-firewall" old_conf=0 old_prog=0
+
+  # Its configuration is only taken over once, the old directory is kept as a backup
+  if [ -d "$OLD_ETC" -a ! -e /etc/arno-firewall ]; then
+    old_conf=1
+  fi
+
+  if [ -f /usr/local/sbin/arno-iptables-firewall -o -f /etc/init.d/arno-iptables-firewall -o \
+       -f /lib/systemd/system/arno-iptables-firewall.service -o -f /usr/lib/systemd/system/arno-iptables-firewall.service ]; then
+    old_prog=1
+  fi
+
+  if [ $old_conf -eq 0 -a $old_prog -eq 0 ]; then
+    return 0
+  fi
+
+  echo "* Found an installation of the iptables version (arno-iptables-firewall)"
+
+  # Take over its configuration, with its paths pointing to the new locations
+  if [ $old_conf -eq 1 ]; then
+    if get_user_yn "Migrate its configuration from $OLD_ETC/ to /etc/arno-firewall/" "y"; then
+      cp -a "$OLD_ETC" /etc/arno-firewall || return 1
+      # Rename paths, commands and the name (but keep the GitHub URLs)
+      grep -rl -e 'arno-iptables-firewall' -e "Arno's Iptables Firewall" /etc/arno-firewall |xargs -r \
+        sed -i -e 's#arno-iptables-firewall#arno-firewall#g' \
+               -e 's#github\.com/arno-firewall/#github.com/arno-iptables-firewall/#g' \
+               -e "s#Arno's Iptables Firewall#Arno's (NFT) Firewall#g"
+      echo "* Configuration migrated, $OLD_ETC/ is left untouched"
+    fi
+  fi
+
+  # Remove its program and service, otherwise both would start at boot
+  if [ $old_prog -eq 1 ] && get_user_yn "Remove the old program and its service (both would start at boot otherwise)" "y"; then
+    if check_command systemctl; then
+      systemctl disable arno-iptables-firewall 2>/dev/null
+    fi
+    if check_command update-rc.d; then
+      update-rc.d -f arno-iptables-firewall remove
+    elif check_command chkconfig; then
+      chkconfig --del arno-iptables-firewall
+    fi
+
+    rm -fv /etc/init.d/arno-iptables-firewall
+    rm -fv /etc/rc.d/rc*.d/*arno-iptables-firewall
+    rm -fv /etc/rc*.d/*arno-iptables-firewall
+    rm -fv /usr/lib/systemd/system/arno-iptables-firewall.service
+    rm -fv /lib/systemd/system/arno-iptables-firewall.service
+    rm -fv /etc/systemd/system/arno-iptables-firewall.service
+    rm -fv /usr/local/sbin/arno-iptables-firewall
+    if readlink /usr/local/sbin/traffic-accounting-show |grep -q '/arno-iptables-firewall/'; then
+      rm -fv /usr/local/sbin/traffic-accounting-show
+    fi
+    rm -rf /usr/local/share/arno-iptables-firewall && echo "removed directory '/usr/local/share/arno-iptables-firewall'"
+    rm -fv /usr/local/share/man/man8/arno-iptables-firewall.8.gz
+    rm -rf /usr/local/share/doc/arno-iptables-firewall && echo "removed directory '/usr/local/share/doc/arno-iptables-firewall'"
+    rm -fv /etc/logrotate.d/arno-iptables-firewall
+    rm -fv /etc/rsyslog.d/arno-iptables-firewall.conf
+  fi
+
+  return 0
+}
+
+
+# Remove the rules of a running iptables version (only call once this version is running)
+flush_iptables_version()
+{
+  local cmd table
+
+  for cmd in iptables ip6tables; do
+    if check_command $cmd && $cmd -n -L BASE_INPUT_CHAIN >/dev/null 2>&1; then
+      for table in filter nat mangle raw; do
+        $cmd -t $table -F 2>/dev/null
+        $cmd -t $table -X 2>/dev/null
+      done
+      $cmd -P INPUT ACCEPT
+      $cmd -P FORWARD ACCEPT
+      $cmd -P OUTPUT ACCEPT
+      echo "* Removed the rules of the iptables version ($cmd)"
+    fi
+  done
+}
+
+
+# Check if rules of the iptables version are (still) loaded
+iptables_version_running()
+{
+  check_command iptables && iptables -n -L BASE_INPUT_CHAIN >/dev/null 2>&1
+}
 
 # Check plugins for (old) versions with different priority
 check_plugins()
@@ -442,6 +534,12 @@ if ! check_dist_version; then
   exit 1
 fi
 
+# Migrate an installation of the iptables version
+if ! migrate_iptables_version; then
+  echo "*Install aborted"
+  exit 1
+fi
+
 copy_overwrite ./bin/arno-firewall /usr/local/sbin/
 copy_overwrite ./bin/arno-fwfilter /usr/local/bin/
 
@@ -500,14 +598,24 @@ fi
 echo ""
 echo "-------------------------------------------------------------------------------"
 echo "** NOTE: You can now (manually) start the firewall by executing              **"
-echo "**       \"/usr/local/sbin/arno-firewall start\"                      **"
+echo "**       \"/usr/local/sbin/arno-firewall start\"                               **"
 echo "**       It is recommended however to first review the settings in           **"
-echo "**       /etc/arno-firewall/firewall.conf!                          **"
+echo "**       /etc/arno-firewall/firewall.conf!                                   **"
 echo "-------------------------------------------------------------------------------"
 echo ""
 
 if get_user_yn "(Re)start firewall"; then
-  /usr/local/sbin/arno-firewall restart
+  # Only remove the rules of the iptables version once this version is running
+  if /usr/local/sbin/arno-firewall restart; then
+    flush_iptables_version
+  fi
+fi
+
+if iptables_version_running; then
+  echo ""
+  echo "NOTE: The rules of the iptables version are still active. They disappear at"
+  echo "      the next reboot (if its service was removed), or rerun this install"
+  echo "      script and choose to (re)start the firewall."
 fi
 
 exit 0
