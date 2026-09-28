@@ -348,11 +348,13 @@ migrate_iptables_version()
         esac
       done
 
-      # Rename paths, commands and the name (but keep the GitHub URLs)
-      grep -rl -e 'arno-iptables-firewall' -e "Arno's Iptables Firewall" /etc/arno-firewall |xargs -r \
-        sed -i -e 's#arno-iptables-firewall#arno-firewall#g' \
-               -e 's#github\.com/arno-firewall/#github.com/arno-iptables-firewall/#g' \
-               -e "s#Arno's Iptables Firewall#Arno's (NFT) Firewall#g"
+      # Rename paths and commands (but keep the GitHub URLs), and in comments also
+      # the name: "Arno's Iptables Firewall(AIF)" -> "Arno's (NFT) Firewall(ANF)"
+      grep -rlE -e 'arno-iptables-firewall' -e "Arno's Iptables Firewall" -e '\bAIF\b' /etc/arno-firewall |xargs -r \
+        sed -i -E -e 's#arno-iptables-firewall#arno-firewall#g' \
+                  -e 's#github\.com/arno-firewall/#github.com/arno-iptables-firewall/#g' \
+                  -e "/^[[:space:]]*#/ s#Arno's Iptables Firewall#Arno's (NFT) Firewall#g" \
+                  -e '/^[[:space:]]*#/ s#\bAIF\b#ANF#g'
       echo "* Configuration migrated, $OLD_ETC/ is left untouched"
     fi
   fi
