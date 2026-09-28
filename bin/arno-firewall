@@ -1,19 +1,19 @@
 #!/bin/sh
 
-MY_VERSION="2.1.2b-DEVEL"
+MY_VERSION="3.0.0-ALPHA1-DEVEL"
 
 # Location of the main configuration file for the firewall
 ##########################################################
 CONFIG_FILE=/etc/arno-firewall/firewall.conf
 
 # ------------------------------------------------------------------------------
-#                         -= Arno's (NFT) Firewall(AIF) =-
-#               Single- & multi-homed firewall script with DSL/ADSL support
+#                         -= Arno's (NFT) Firewall(ANF) =-
+#                       Single- & multi-homed firewall script
 #
 #                           ~ In memory of my dear parents ~
 #
 # (C) Copyright 2001-2026 by Arno van Amersfoort & Lonnie Abelbeck
-# Web                   : https://github.com/arno-iptables-firewall/aif
+# Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .
 #                         at the proper locations!)
@@ -32,7 +32,7 @@ CONFIG_FILE=/etc/arno-firewall/firewall.conf
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 # ------------------------------------------------------------------------------
 
-echo "Arno's (NFT) Firewall(AIF) v$MY_VERSION"
+echo "Arno's (NFT) Firewall(ANF) v$MY_VERSION"
 echo "-------------------------------------------------------------------------------"
 
 # Check if the main config file exists and if so load it
@@ -713,14 +713,14 @@ setup_default_policies()
   # The HOST_BLOCK_SRC_DROP chain should always DROP
   ##################################################
   if [ "$BLOCKED_HOST_LOG" = "1" -o "$BLOCKED_HOST_LOG" = "2" ]; then
-    nft_rule HOST_BLOCK_SRC_DROP "limit rate 1/minute burst 1 packets log prefix \"AIF:Blocked inbound host: \" level $LOGLEVEL"
+    nft_rule HOST_BLOCK_SRC_DROP "limit rate 1/minute burst 1 packets log prefix \"ANF:Blocked inbound host: \" level $LOGLEVEL"
   fi
   nft_rule HOST_BLOCK_SRC_DROP 'drop'
 
   # The HOST_BLOCK_DST_DROP chain should always DROP
   ##################################################
   if [ "$BLOCKED_HOST_LOG" = "1" -o "$BLOCKED_HOST_LOG" = "3" ]; then
-    nft_rule HOST_BLOCK_DST_DROP "limit rate 1/minute burst 1 packets log prefix \"AIF:Blocked outbound host: \" level $LOGLEVEL"
+    nft_rule HOST_BLOCK_DST_DROP "limit rate 1/minute burst 1 packets log prefix \"ANF:Blocked outbound host: \" level $LOGLEVEL"
   fi
   nft_rule HOST_BLOCK_DST_DROP 'drop'
 
@@ -728,7 +728,7 @@ setup_default_policies()
   ##############################################
   if [ "$IPV6_SUPPORT" = "1" ]; then
     if [ "$LINK_LOCAL_DROP_LOG" != "0" ]; then
-      nft_rule LINK_LOCAL_DROP "limit rate 1/minute burst 1 packets log prefix \"AIF:Dropped Link-Local: \" level $LOGLEVEL"
+      nft_rule LINK_LOCAL_DROP "limit rate 1/minute burst 1 packets log prefix \"ANF:Dropped Link-Local: \" level $LOGLEVEL"
     fi
     nft_rule LINK_LOCAL_DROP 'drop'
   fi
@@ -747,31 +747,31 @@ setup_valid_chk_chain()
 
     # (NMAP) FIN/URG/PSH
     ####################
-    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin|psh|urg limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth XMAS scan: \" level $LOGLEVEL"
+    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin|psh|urg limit rate 3/minute burst 5 packets log prefix \"ANF:Stealth XMAS scan: \" level $LOGLEVEL"
 
     # SYN/RST/ACK/FIN/URG
     #####################
-    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin|syn|rst|ack|urg limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth XMAS-PSH scan: \" level $LOGLEVEL"
+    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin|syn|rst|ack|urg limit rate 3/minute burst 5 packets log prefix \"ANF:Stealth XMAS-PSH scan: \" level $LOGLEVEL"
 
     # ALL/ALL
     #########
-    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin|syn|rst|psh|ack|urg limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth XMAS-ALL scan: \" level $LOGLEVEL"
+    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin|syn|rst|psh|ack|urg limit rate 3/minute burst 5 packets log prefix \"ANF:Stealth XMAS-ALL scan: \" level $LOGLEVEL"
 
     # NMAP FIN Stealth
     ##################
-    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth FIN scan: \" level $LOGLEVEL"
+    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == fin limit rate 3/minute burst 5 packets log prefix \"ANF:Stealth FIN scan: \" level $LOGLEVEL"
 
     # SYN/RST
     #########
-    nft_rule VALID_CHK "tcp flags & (syn|rst) == syn|rst limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth SYN/RST scan: \" level $LOGLEVEL"
+    nft_rule VALID_CHK "tcp flags & (syn|rst) == syn|rst limit rate 3/minute burst 5 packets log prefix \"ANF:Stealth SYN/RST scan: \" level $LOGLEVEL"
 
     # SYN/FIN (probably)
     ####################
-    nft_rule VALID_CHK "tcp flags & (syn|fin) == syn|fin limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth SYN/FIN scan?: \" level $LOGLEVEL"
+    nft_rule VALID_CHK "tcp flags & (syn|fin) == syn|fin limit rate 3/minute burst 5 packets log prefix \"ANF:Stealth SYN/FIN scan?: \" level $LOGLEVEL"
 
     # Null scan
     ###########
-    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == 0x0 limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth Null scan: \" level $LOGLEVEL"
+    nft_rule VALID_CHK "tcp flags & (fin|syn|rst|psh|ack|urg) == 0x0 limit rate 3/minute burst 5 packets log prefix \"ANF:Stealth Null scan: \" level $LOGLEVEL"
   else
     echo "Logging of stealth scans (nmap probes etc.) disabled"
   fi
@@ -812,14 +812,14 @@ setup_valid_chk_chain()
   ###############################################################################################
   if [ "$INVALID_TCP_LOG" = "1" ]; then
     echo "Logging of INVALID TCP packets enabled"
-    nft_rule VALID_CHK "meta l4proto tcp ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID TCP: \" level $LOGLEVEL"
+    nft_rule VALID_CHK "meta l4proto tcp ct state invalid limit rate 1/minute burst 2 packets log prefix \"ANF:INVALID TCP: \" level $LOGLEVEL"
   else
     echo "Logging of INVALID TCP packets disabled"
   fi
 
   if [ "$INVALID_UDP_LOG" = "1" ]; then
     echo "Logging of INVALID UDP packets enabled"
-    nft_rule VALID_CHK "meta l4proto udp ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID UDP: \" level $LOGLEVEL"
+    nft_rule VALID_CHK "meta l4proto udp ct state invalid limit rate 1/minute burst 2 packets log prefix \"ANF:INVALID UDP: \" level $LOGLEVEL"
   else
     echo "Logging of INVALID UDP packets disabled"
   fi
@@ -829,14 +829,14 @@ setup_valid_chk_chain()
 
     # Only log INVALID ICMP-request packets when we also want to log "normal" ICMP-request packets
     if [ "$ICMP_REQUEST_LOG" != "0" ]; then
-      nft_rule VALID_CHK "icmp type echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID ICMP-request: \" level $LOGLEVEL"
-      nft_rule VALID_CHK "icmpv6 type echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID ICMP-request: \" level $LOGLEVEL"
+      nft_rule VALID_CHK "icmp type echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"ANF:INVALID ICMP-request: \" level $LOGLEVEL"
+      nft_rule VALID_CHK "icmpv6 type echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"ANF:INVALID ICMP-request: \" level $LOGLEVEL"
     fi
 
     # Only log INVALID ICMP-other when enabled in the config
     if [ "$ICMP_OTHER_LOG" != "0" ]; then
-      nft_rule VALID_CHK "icmp type != echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID ICMP-other: \" level $LOGLEVEL"
-      nft_rule VALID_CHK "icmpv6 type != echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"AIF:INVALID ICMP-other: \" level $LOGLEVEL"
+      nft_rule VALID_CHK "icmp type != echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"ANF:INVALID ICMP-other: \" level $LOGLEVEL"
+      nft_rule VALID_CHK "icmpv6 type != echo-request ct state invalid limit rate 1/minute burst 2 packets log prefix \"ANF:INVALID ICMP-other: \" level $LOGLEVEL"
     fi
   else
     echo "Logging of INVALID ICMP packets disabled"
@@ -851,7 +851,7 @@ setup_valid_chk_chain()
   ########################################################################################
   if [ "$FRAG_DROP" = "1" ]; then
     echo "Dropping and logging of IPv4 fragmented packets enabled"
-    nft_rule VALID_CHK 'ip frag-off & 0x1fff != 0 limit rate 3/minute burst 1 packets log prefix "AIF:Fragment packet: "'
+    nft_rule VALID_CHK 'ip frag-off & 0x1fff != 0 limit rate 3/minute burst 1 packets log prefix "ANF:Fragment packet: "'
     nft_rule VALID_CHK 'ip frag-off & 0x1fff != 0 drop'
   else
     echo "Dropping and logging of IPv4 fragmented packets disabled"
@@ -868,21 +868,21 @@ setup_reserved_net_chk_chain()
   ####################################
   if [ "$RESERVED_NET_LOG" = "1" ]; then
     echo "Logging of access from reserved nets enabled"
-    nft_rule RESERVED_NET_CHK "ip saddr 10.0.0.0/8 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Private address: \" level $LOGLEVEL"
+    nft_rule RESERVED_NET_CHK "ip saddr 10.0.0.0/8 limit rate 1/minute burst 1 packets log prefix \"ANF:IPv4 Private address: \" level $LOGLEVEL"
 
-    nft_rule RESERVED_NET_CHK "ip saddr 172.16.0.0/12 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Private address: \" level $LOGLEVEL"
+    nft_rule RESERVED_NET_CHK "ip saddr 172.16.0.0/12 limit rate 1/minute burst 1 packets log prefix \"ANF:IPv4 Private address: \" level $LOGLEVEL"
 
-    nft_rule RESERVED_NET_CHK "ip saddr 192.168.0.0/16 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Private address: \" level $LOGLEVEL"
+    nft_rule RESERVED_NET_CHK "ip saddr 192.168.0.0/16 limit rate 1/minute burst 1 packets log prefix \"ANF:IPv4 Private address: \" level $LOGLEVEL"
 
-    nft_rule RESERVED_NET_CHK "ip saddr 169.254.0.0/16 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Link-local address: \" level $LOGLEVEL"
+    nft_rule RESERVED_NET_CHK "ip saddr 169.254.0.0/16 limit rate 1/minute burst 1 packets log prefix \"ANF:IPv4 Link-local address: \" level $LOGLEVEL"
 
-    nft_rule RESERVED_NET_CHK "ip saddr 224.0.0.0/24 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Multicast address: \" level $LOGLEVEL"
+    nft_rule RESERVED_NET_CHK "ip saddr 224.0.0.0/24 limit rate 1/minute burst 1 packets log prefix \"ANF:IPv4 Multicast address: \" level $LOGLEVEL"
 
-    nft_rule RESERVED_NET_CHK "ip saddr 239.0.0.0/24 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv4 Multicast address: \" level $LOGLEVEL"
+    nft_rule RESERVED_NET_CHK "ip saddr 239.0.0.0/24 limit rate 1/minute burst 1 packets log prefix \"ANF:IPv4 Multicast address: \" level $LOGLEVEL"
 
     if [ "$IPV6_SUPPORT" = "1" ]; then
       # IPv6 not 2000::/3 is non-Global Unicast
-      nft_rule RESERVED_NET_CHK "ip6 saddr != 2000::/3 limit rate 1/minute burst 1 packets log prefix \"AIF:IPv6 non-Global address: \" level $LOGLEVEL"
+      nft_rule RESERVED_NET_CHK "ip6 saddr != 2000::/3 limit rate 1/minute burst 1 packets log prefix \"ANF:IPv6 non-Global address: \" level $LOGLEVEL"
     fi
   else
     echo "Logging of access from reserved nets disabled"
@@ -923,7 +923,7 @@ setup_spoof_chk_chain()
           # Any internal net is valid
           nft_rule SPOOF_CHK "$(nft_if iifname $interface) $(nft_addr saddr $net) return"
         done
-        nft_rule SPOOF_CHK "$(nft_addr saddr $net) limit rate 3/minute burst 5 packets log prefix \"AIF:Spoofed packet: \" level $LOGLEVEL"
+        nft_rule SPOOF_CHK "$(nft_addr saddr $net) limit rate 3/minute burst 5 packets log prefix \"ANF:Spoofed packet: \" level $LOGLEVEL"
         nft_rule SPOOF_CHK "$(nft_addr saddr $net) jump POST_INPUT_DROP_CHAIN"
       done
       echo ""
@@ -943,7 +943,7 @@ setup_spoof_chk_chain()
           # Any dmz net is valid
           nft_rule SPOOF_CHK "$(nft_if iifname $interface) $(nft_addr saddr $net) return"
         done
-        nft_rule SPOOF_CHK "$(nft_addr saddr $net) limit rate 3/minute burst 5 packets log prefix \"AIF:Spoofed packet: \" level $LOGLEVEL"
+        nft_rule SPOOF_CHK "$(nft_addr saddr $net) limit rate 3/minute burst 5 packets log prefix \"ANF:Spoofed packet: \" level $LOGLEVEL"
         nft_rule SPOOF_CHK "$(nft_addr saddr $net) jump POST_INPUT_DROP_CHAIN"
       done
       echo ""
@@ -1148,8 +1148,8 @@ setup_dmz_input_chain()
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" ]; then
-    nft_rule DMZ_INPUT_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
-    nft_rule DMZ_INPUT_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule DMZ_INPUT_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule DMZ_INPUT_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop ICMP packets
@@ -1158,7 +1158,7 @@ setup_dmz_input_chain()
 
   # Log everything else
   if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-    nft_rule DMZ_INPUT_CHAIN "limit rate 3/minute log prefix \"AIF:DMZ-INPUT denied: \" level $LOGLEVEL"
+    nft_rule DMZ_INPUT_CHAIN "limit rate 3/minute log prefix \"ANF:DMZ-INPUT denied: \" level $LOGLEVEL"
   fi
 
   # Everything else is denied
@@ -1247,8 +1247,8 @@ setup_dmz_lan_forward_chain()
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" ]; then
-    nft_rule DMZ_LAN_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
-    nft_rule DMZ_LAN_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule DMZ_LAN_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule DMZ_LAN_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop ICMP packets
@@ -1257,7 +1257,7 @@ setup_dmz_lan_forward_chain()
 
   # Log everything else
   if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-    nft_rule DMZ_LAN_FORWARD_CHAIN "limit rate 3/minute log prefix \"AIF:DMZ->LAN denied: \" level $LOGLEVEL"
+    nft_rule DMZ_LAN_FORWARD_CHAIN "limit rate 3/minute log prefix \"ANF:DMZ->LAN denied: \" level $LOGLEVEL"
   fi
 
   # Everything else is denied
@@ -1357,7 +1357,7 @@ setup_inet_dmz_forward_chain()
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-                nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET->DMZ denied: \" level $LOGLEVEL"
+                nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Host INET->DMZ denied: \" level $LOGLEVEL"
               fi
               nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port drop"
             done
@@ -1383,7 +1383,7 @@ setup_inet_dmz_forward_chain()
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-                nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET->DMZ denied: \" level $LOGLEVEL"
+                nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Host INET->DMZ denied: \" level $LOGLEVEL"
               fi
               nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port drop"
             done
@@ -1409,7 +1409,7 @@ setup_inet_dmz_forward_chain()
           for proto in $protos; do
             for interface in $interfaces; do
               if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-                nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET->DMZ denied: \" level $LOGLEVEL"
+                nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"ANF:Host INET->DMZ denied: \" level $LOGLEVEL"
               fi
               nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto drop"
             done
@@ -1505,7 +1505,7 @@ setup_inet_dmz_forward_chain()
         for destip in $destips; do
           for interface in $interfaces; do
             if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:INET->DMZ denied: \" level $LOGLEVEL"
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port limit rate 1/second burst 1 packets log prefix \"ANF:INET->DMZ denied: \" level $LOGLEVEL"
             fi
             nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port drop"
           done
@@ -1529,7 +1529,7 @@ setup_inet_dmz_forward_chain()
         for destip in $destips; do
           for interface in $interfaces; do
             if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) udp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:INET->DMZ denied: \" level $LOGLEVEL"
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) udp dport $port limit rate 1/second burst 1 packets log prefix \"ANF:INET->DMZ denied: \" level $LOGLEVEL"
             fi
             nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) udp dport $port drop"
           done
@@ -1553,7 +1553,7 @@ setup_inet_dmz_forward_chain()
         for destip in $destips; do
           for interface in $interfaces; do
             if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"AIF:INET->DMZ denied: \" level $LOGLEVEL"
+              nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"ANF:INET->DMZ denied: \" level $LOGLEVEL"
             fi
             nft_rule INET_DMZ_FORWARD_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) meta l4proto $proto drop"
           done
@@ -1566,8 +1566,8 @@ setup_inet_dmz_forward_chain()
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" ]; then
-    nft_rule INET_DMZ_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
-    nft_rule INET_DMZ_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule INET_DMZ_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule INET_DMZ_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   echo "  Denying all other INET->DMZ packets"
@@ -1577,7 +1577,7 @@ setup_inet_dmz_forward_chain()
   nft_rule INET_DMZ_FORWARD_CHAIN "icmpv6 type echo-request drop"
 
   if [ "$DMZ_INPUT_DENY_LOG" != "0" ]; then
-    nft_rule INET_DMZ_FORWARD_CHAIN "limit rate 1/second burst 1 packets log prefix \"AIF:INET->DMZ denied: \" level $LOGLEVEL"
+    nft_rule INET_DMZ_FORWARD_CHAIN "limit rate 1/second burst 1 packets log prefix \"ANF:INET->DMZ denied: \" level $LOGLEVEL"
   fi
   nft_rule INET_DMZ_FORWARD_CHAIN "drop"
 }
@@ -1675,7 +1675,7 @@ setup_dmz_inet_forward_chain()
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-                nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host DMZ->INET denied: \" level $LOGLEVEL"
+                nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Host DMZ->INET denied: \" level $LOGLEVEL"
               fi
               nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port drop"
             done
@@ -1701,7 +1701,7 @@ setup_dmz_inet_forward_chain()
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-                nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host DMZ->INET denied: \" level $LOGLEVEL"
+                nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Host DMZ->INET denied: \" level $LOGLEVEL"
               fi
               nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port drop"
             done
@@ -1727,7 +1727,7 @@ setup_dmz_inet_forward_chain()
           for proto in $protos; do
             for interface in $interfaces; do
               if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-                nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"AIF:Host DMZ->INET denied: \" level $LOGLEVEL"
+                nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"ANF:Host DMZ->INET denied: \" level $LOGLEVEL"
               fi
               nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto drop"
             done
@@ -1808,7 +1808,7 @@ setup_dmz_inet_forward_chain()
       for port in $ports; do
         for interface in $interfaces; do
           if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-            nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:DMZ->INET denied: \" level $LOGLEVEL"
+            nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port limit rate 1/second burst 1 packets log prefix \"ANF:DMZ->INET denied: \" level $LOGLEVEL"
           fi
           nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port drop"
         done
@@ -1830,7 +1830,7 @@ setup_dmz_inet_forward_chain()
       for port in $ports; do
         for interface in $interfaces; do
           if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-            nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:DMZ->INET denied: \" level $LOGLEVEL"
+            nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port limit rate 1/second burst 1 packets log prefix \"ANF:DMZ->INET denied: \" level $LOGLEVEL"
           fi
           nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port drop"
         done
@@ -1852,7 +1852,7 @@ setup_dmz_inet_forward_chain()
       for proto in $protos; do
         for interface in $interfaces; do
           if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-            nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"AIF:DMZ->INET denied: \" level $LOGLEVEL"
+            nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"ANF:DMZ->INET denied: \" level $LOGLEVEL"
           fi
           nft_rule DMZ_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto drop"
         done
@@ -1872,8 +1872,8 @@ setup_dmz_inet_forward_chain()
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" -a "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-    nft_rule DMZ_INET_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
-    nft_rule DMZ_INET_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule DMZ_INET_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule DMZ_INET_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop ICMP (remaining) packets
@@ -1890,7 +1890,7 @@ setup_dmz_inet_forward_chain()
     nft_rule DMZ_INET_FORWARD_CHAIN "accept"
   else
     if [ "$DMZ_OUTPUT_DENY_LOG" != "0" ]; then
-      nft_rule DMZ_INET_FORWARD_CHAIN "limit rate 1/second burst 1 packets log prefix \"AIF:DMZ->INET denied: \" level $LOGLEVEL"
+      nft_rule DMZ_INET_FORWARD_CHAIN "limit rate 1/second burst 1 packets log prefix \"ANF:DMZ->INET denied: \" level $LOGLEVEL"
     fi
     echo "  Denying all (other) ports/protocols"
     nft_rule DMZ_INET_FORWARD_CHAIN "drop"
@@ -1973,7 +1973,7 @@ setup_int_input_chain()
       for host in `nft_hosts "$hosts"`; do
         for port in $ports; do
           if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-            nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN denied: \" level $LOGLEVEL"
+            nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Host LAN denied: \" level $LOGLEVEL"
           fi
           nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport $port drop"
         done
@@ -1995,7 +1995,7 @@ setup_int_input_chain()
       for host in `nft_hosts "$hosts"`; do
         for port in $ports; do
           if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-            nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN denied: \" level $LOGLEVEL"
+            nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Host LAN denied: \" level $LOGLEVEL"
           fi
           nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport $port drop"
         done
@@ -2017,7 +2017,7 @@ setup_int_input_chain()
       for host in `nft_hosts "$hosts"`; do
         for proto in $protos; do
           if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-            nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN denied: \" level $LOGLEVEL"
+            nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"ANF:Host LAN denied: \" level $LOGLEVEL"
           fi
           nft_rule INT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto drop"
         done
@@ -2070,7 +2070,7 @@ setup_int_input_chain()
     NFT_COMMENT="LAN_DENY_TCP"
     for port in $(echo "$LAN_DENY_TCP" |nft_ports); do
       if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-        nft_rule INT_INPUT_CHAIN "tcp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:LAN-INPUT denied: \" level $LOGLEVEL"
+        nft_rule INT_INPUT_CHAIN "tcp dport $port limit rate 1/second burst 1 packets log prefix \"ANF:LAN-INPUT denied: \" level $LOGLEVEL"
       fi
       nft_rule INT_INPUT_CHAIN "tcp dport $port drop"
     done
@@ -2085,7 +2085,7 @@ setup_int_input_chain()
     NFT_COMMENT="LAN_DENY_UDP"
     for port in $(echo "$LAN_DENY_UDP" |nft_ports); do
       if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-        nft_rule INT_INPUT_CHAIN "udp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:LAN-INPUT denied: \" level $LOGLEVEL"
+        nft_rule INT_INPUT_CHAIN "udp dport $port limit rate 1/second burst 1 packets log prefix \"ANF:LAN-INPUT denied: \" level $LOGLEVEL"
       fi
       nft_rule INT_INPUT_CHAIN "udp dport $port drop"
     done
@@ -2100,7 +2100,7 @@ setup_int_input_chain()
     NFT_COMMENT="LAN_DENY_IP"
     for proto in $LAN_DENY_IP; do
       if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-        nft_rule INT_INPUT_CHAIN "meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"AIF:LAN-INPUT denied: \" level $LOGLEVEL"
+        nft_rule INT_INPUT_CHAIN "meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"ANF:LAN-INPUT denied: \" level $LOGLEVEL"
       fi
       nft_rule INT_INPUT_CHAIN "meta l4proto $proto drop"
     done
@@ -2118,8 +2118,8 @@ setup_int_input_chain()
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" -a "$LAN_INPUT_DENY_LOG" != "0" ]; then
-    nft_rule INT_INPUT_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
-    nft_rule INT_INPUT_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule INT_INPUT_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule INT_INPUT_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop (remaining) ICMP packets
@@ -2137,7 +2137,7 @@ setup_int_input_chain()
   else
     echo " Denying all (other) ports/protocols"
     if [ "$LAN_INPUT_DENY_LOG" != "0" ]; then
-      nft_rule INT_INPUT_CHAIN "limit rate 1/second burst 1 packets log prefix \"AIF:LAN-INPUT denied: \" level $LOGLEVEL"
+      nft_rule INT_INPUT_CHAIN "limit rate 1/second burst 1 packets log prefix \"ANF:LAN-INPUT denied: \" level $LOGLEVEL"
     fi
     nft_rule INT_INPUT_CHAIN "drop"
   fi
@@ -2323,7 +2323,7 @@ setup_lan_inet_forward_chain()
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-                nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN->INET denied: \" level $LOGLEVEL"
+                nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Host LAN->INET denied: \" level $LOGLEVEL"
               fi
               nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) tcp dport $port drop"
             done
@@ -2349,7 +2349,7 @@ setup_lan_inet_forward_chain()
           for port in $ports; do
             for interface in $interfaces; do
               if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-                nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN->INET denied: \" level $LOGLEVEL"
+                nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Host LAN->INET denied: \" level $LOGLEVEL"
               fi
               nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) udp dport $port drop"
             done
@@ -2375,7 +2375,7 @@ setup_lan_inet_forward_chain()
           for proto in $protos; do
             for interface in $interfaces; do
               if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-                nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"AIF:Host LAN->INET denied: \" level $LOGLEVEL"
+                nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"ANF:Host LAN->INET denied: \" level $LOGLEVEL"
               fi
               nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $shost) $(nft_addr daddr $dhost) meta l4proto $proto drop"
             done
@@ -2456,7 +2456,7 @@ setup_lan_inet_forward_chain()
       for port in $ports; do
         for interface in $interfaces; do
           if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-            nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:LAN->INET denied: \" level $LOGLEVEL"
+            nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port limit rate 1/second burst 1 packets log prefix \"ANF:LAN->INET denied: \" level $LOGLEVEL"
           fi
           nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") tcp dport $port drop"
         done
@@ -2478,7 +2478,7 @@ setup_lan_inet_forward_chain()
       for port in $ports; do
         for interface in $interfaces; do
           if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-            nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:LAN->INET denied: \" level $LOGLEVEL"
+            nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port limit rate 1/second burst 1 packets log prefix \"ANF:LAN->INET denied: \" level $LOGLEVEL"
           fi
           nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") udp dport $port drop"
         done
@@ -2500,7 +2500,7 @@ setup_lan_inet_forward_chain()
       for proto in $protos; do
         for interface in $interfaces; do
           if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-            nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"AIF:LAN->INET denied: \" level $LOGLEVEL"
+            nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"ANF:LAN->INET denied: \" level $LOGLEVEL"
           fi
           nft_rule LAN_INET_FORWARD_CHAIN "$(nft_if oifname "$interface") meta l4proto $proto drop"
         done
@@ -2520,8 +2520,8 @@ setup_lan_inet_forward_chain()
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" -a "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-    nft_rule LAN_INET_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
-    nft_rule LAN_INET_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule LAN_INET_FORWARD_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule LAN_INET_FORWARD_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop (remaining) ICMP packets
@@ -2538,7 +2538,7 @@ setup_lan_inet_forward_chain()
     nft_rule LAN_INET_FORWARD_CHAIN "accept"
   else
     if [ "$LAN_OUTPUT_DENY_LOG" != "0" ]; then
-      nft_rule LAN_INET_FORWARD_CHAIN "limit rate 1/second burst 1 packets log prefix \"AIF:LAN->INET denied: \" level $LOGLEVEL"
+      nft_rule LAN_INET_FORWARD_CHAIN "limit rate 1/second burst 1 packets log prefix \"ANF:LAN->INET denied: \" level $LOGLEVEL"
     fi
     echo "  Denying all (other) ports/protocols"
     nft_rule LAN_INET_FORWARD_CHAIN "drop"
@@ -2554,8 +2554,8 @@ setup_ext_input_chain()
   ## Log scanning of port 0 fingerprinting
   ########################################
   if [ "$SCAN_LOG" != "0" ]; then
-    nft_rule EXT_INPUT_CHAIN "tcp dport 0 limit rate 6/hour burst 1 packets log prefix \"AIF:Port 0 OS fingerprint: \" level $LOGLEVEL"
-    nft_rule EXT_INPUT_CHAIN "udp dport 0 limit rate 6/hour burst 1 packets log prefix \"AIF:Port 0 OS fingerprint: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "tcp dport 0 limit rate 6/hour burst 1 packets log prefix \"ANF:Port 0 OS fingerprint: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "udp dport 0 limit rate 6/hour burst 1 packets log prefix \"ANF:Port 0 OS fingerprint: \" level $LOGLEVEL"
   fi
 
   # Drop port 0 scan packets
@@ -2566,8 +2566,8 @@ setup_ext_input_chain()
   ## Log scanning of source port 0
   ################################
   if [ "$SCAN_LOG" != "0" ]; then
-    nft_rule EXT_INPUT_CHAIN "tcp sport 0 limit rate 6/hour burst 5 packets log prefix \"AIF:TCP source port 0: \" level $LOGLEVEL"
-    nft_rule EXT_INPUT_CHAIN "udp sport 0 limit rate 6/hour burst 5 packets log prefix \"AIF:UDP source port 0: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "tcp sport 0 limit rate 6/hour burst 5 packets log prefix \"ANF:TCP source port 0: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "udp sport 0 limit rate 6/hour burst 5 packets log prefix \"ANF:UDP source port 0: \" level $LOGLEVEL"
   fi
 
   # Drop source port 0 packets
@@ -2801,7 +2801,7 @@ setup_ext_input_chain()
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
-              nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Hostwise TCP rejected: \" level $LOGLEVEL"
+              nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Hostwise TCP rejected: \" level $LOGLEVEL"
 
               nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) tcp dport $port reject with tcp reset"
             done
@@ -2827,7 +2827,7 @@ setup_ext_input_chain()
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
-              nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Hostwise UDP rejected: \" level $LOGLEVEL"
+              nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) udp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Hostwise UDP rejected: \" level $LOGLEVEL"
 
               nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) udp dport $port reject with icmpx type host-unreachable"
             done
@@ -2946,7 +2946,7 @@ setup_ext_input_chain()
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
-              nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET denied: \" level $LOGLEVEL"
+              nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) tcp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Host INET denied: \" level $LOGLEVEL"
 
               nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) tcp dport $port jump POST_INPUT_DROP_CHAIN"
             done
@@ -2972,7 +2972,7 @@ setup_ext_input_chain()
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
-              nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) udp dport $port limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET denied: \" level $LOGLEVEL"
+              nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) udp dport $port limit rate 1/hour burst 1 packets log prefix \"ANF:Host INET denied: \" level $LOGLEVEL"
 
               nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) udp dport $port jump POST_INPUT_DROP_CHAIN"
             done
@@ -2998,7 +2998,7 @@ setup_ext_input_chain()
         for proto in $protos; do
           for destip in $destips; do
             for interface in $interfaces; do
-              nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET denied: \" level $LOGLEVEL"
+              nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto limit rate 1/hour burst 1 packets log prefix \"ANF:Host INET denied: \" level $LOGLEVEL"
 
               nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto $proto jump POST_INPUT_DROP_CHAIN"
             done
@@ -3024,8 +3024,8 @@ setup_ext_input_chain()
         for destip in $destips; do
           for interface in $interfaces; do
             if [ "$ICMP_DROP_LOG" != "0" ]; then
-              nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) icmp type echo-request limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET denied: \" level $LOGLEVEL"
-              nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) icmpv6 type echo-request limit rate 1/hour burst 1 packets log prefix \"AIF:Host INET denied: \" level $LOGLEVEL"
+              nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) icmp type echo-request limit rate 1/hour burst 1 packets log prefix \"ANF:Host INET denied: \" level $LOGLEVEL"
+              nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) icmpv6 type echo-request limit rate 1/hour burst 1 packets log prefix \"ANF:Host INET denied: \" level $LOGLEVEL"
             fi
             nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) icmp type echo-request jump POST_INPUT_DROP_CHAIN"
             nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) icmpv6 type echo-request jump POST_INPUT_DROP_CHAIN"
@@ -3049,7 +3049,7 @@ setup_ext_input_chain()
       for port in $ports; do
         for destip in $destips; do
           for interface in $interfaces; do
-            nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port limit rate 3/minute burst 5 packets log prefix \"AIF:INET-INPUT denied: \" level $LOGLEVEL"
+            nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port limit rate 3/minute burst 5 packets log prefix \"ANF:INET-INPUT denied: \" level $LOGLEVEL"
 
             nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port jump POST_INPUT_DROP_CHAIN"
           done
@@ -3072,7 +3072,7 @@ setup_ext_input_chain()
       for port in $ports; do
         for destip in $destips; do
           for interface in $interfaces; do
-            nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) udp dport $port limit rate 3/minute burst 5 packets log prefix \"AIF:INET-INPUT denied: \" level $LOGLEVEL"
+            nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) udp dport $port limit rate 3/minute burst 5 packets log prefix \"ANF:INET-INPUT denied: \" level $LOGLEVEL"
 
             nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) udp dport $port jump POST_INPUT_DROP_CHAIN"
           done
@@ -3095,7 +3095,7 @@ setup_ext_input_chain()
       for port in $ports; do
         for destip in $destips; do
           for interface in $interfaces; do
-            nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port limit rate 3/minute burst 5 packets log prefix \"AIF:Rejected TCP port: \" level $LOGLEVEL"
+            nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port limit rate 3/minute burst 5 packets log prefix \"ANF:Rejected TCP port: \" level $LOGLEVEL"
 
             nft_rule EXT_INPUT_CHAIN "$(nft_if iifname "$interface") $(nft_addr daddr $destip) tcp dport $port reject with tcp reset"
           done
@@ -3118,7 +3118,7 @@ setup_ext_input_chain()
       for port in $ports; do
         for destip in $destips; do
           for interface in $interfaces; do
-            nft_rule EXT_INPUT_CHAIN "udp dport $port limit rate 3/minute burst 5 packets log prefix \"AIF:Rejected UDP port: \" level $LOGLEVEL"
+            nft_rule EXT_INPUT_CHAIN "udp dport $port limit rate 3/minute burst 5 packets log prefix \"ANF:Rejected UDP port: \" level $LOGLEVEL"
 
             nft_rule EXT_INPUT_CHAIN "udp dport $port reject with icmpx type host-unreachable"
           done
@@ -3250,7 +3250,7 @@ setup_ext_input_chain()
   if [ "$DRDOS_PROTECT" = "1" ]; then
     echo " Enabling protection against DRDOS-abuse"
 
-    nft_rule EXT_INPUT_CHAIN "meta l4proto { tcp, udp } th dport != 2049 th sport { 20, 21, 22, 23, 80, 110, 143, 443, 993, 995 } limit rate 6/hour burst 1 packets log prefix \"AIF:Possible DRDOS abuse: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "meta l4proto { tcp, udp } th dport != 2049 th sport { 20, 21, 22, 23, 80, 110, 143, 443, 993, 995 } limit rate 6/hour burst 1 packets log prefix \"ANF:Possible DRDOS abuse: \" level $LOGLEVEL"
     nft_rule EXT_INPUT_CHAIN 'meta l4proto { tcp, udp } th dport != 2049 th sport { 20, 21, 22, 23, 80, 110, 143, 443, 993, 995 } jump POST_INPUT_DROP_CHAIN'
   fi
 
@@ -3344,11 +3344,11 @@ setup_ext_input_chain()
   if [ "$POSSIBLE_SCAN_LOG" = "1" ]; then
     echo " Logging of possible stealth scans enabled"
     if [ "$UNPRIV_TCP_LOG" != "0" ]; then
-      nft_rule EXT_INPUT_CHAIN "tcp flags & (fin|syn|rst|ack) != syn tcp dport 1024-65535 limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth scan? (UNPRIV): \" level $LOGLEVEL"
+      nft_rule EXT_INPUT_CHAIN "tcp flags & (fin|syn|rst|ack) != syn tcp dport 1024-65535 limit rate 3/minute burst 5 packets log prefix \"ANF:Stealth scan? (UNPRIV): \" level $LOGLEVEL"
     fi
 
     if [ "$PRIV_TCP_LOG" != "0" ]; then
-      nft_rule EXT_INPUT_CHAIN "tcp flags & (fin|syn|rst|ack) != syn tcp dport 0-1023 limit rate 3/minute burst 5 packets log prefix \"AIF:Stealth scan? (PRIV): \" level $LOGLEVEL"
+      nft_rule EXT_INPUT_CHAIN "tcp flags & (fin|syn|rst|ack) != syn tcp dport 0-1023 limit rate 3/minute burst 5 packets log prefix \"ANF:Stealth scan? (PRIV): \" level $LOGLEVEL"
     fi
   else
     echo " Logging of possible stealth scans disabled"
@@ -3389,9 +3389,9 @@ setup_ext_input_chain()
   ##################################################
   if [ "$PRIV_TCP_LOG" != "0" ]; then
     echo " Logging of (other) packets to PRIVILEGED TCP ports enabled"
-    nft_rule EXT_INPUT_CHAIN "tcp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"AIF:PRIV TCP packet: \" level $LOGLEVEL"
-    nft_rule EXT_MULTICAST_CHAIN "tcp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"AIF:PRIV TCP multicast: \" level $LOGLEVEL"
-    nft_rule EXT_BROADCAST_CHAIN "tcp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"AIF:PRIV TCP broadcast: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "tcp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"ANF:PRIV TCP packet: \" level $LOGLEVEL"
+    nft_rule EXT_MULTICAST_CHAIN "tcp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"ANF:PRIV TCP multicast: \" level $LOGLEVEL"
+    nft_rule EXT_BROADCAST_CHAIN "tcp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"ANF:PRIV TCP broadcast: \" level $LOGLEVEL"
   else
     echo " Logging of (other) packets to PRIVILEGED TCP ports disabled"
   fi
@@ -3400,9 +3400,9 @@ setup_ext_input_chain()
   ##################################################
   if [ "$PRIV_UDP_LOG" != "0" ]; then
     echo " Logging of (other) packets to PRIVILEGED UDP ports enabled"
-    nft_rule EXT_INPUT_CHAIN "udp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"AIF:PRIV UDP packet: \" level $LOGLEVEL"
-    nft_rule EXT_MULTICAST_CHAIN "udp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"AIF:PRIV UDP multicast: \" level $LOGLEVEL"
-    nft_rule EXT_BROADCAST_CHAIN "udp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"AIF:PRIV UDP broadcast: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "udp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"ANF:PRIV UDP packet: \" level $LOGLEVEL"
+    nft_rule EXT_MULTICAST_CHAIN "udp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"ANF:PRIV UDP multicast: \" level $LOGLEVEL"
+    nft_rule EXT_BROADCAST_CHAIN "udp dport 0-1023 limit rate 6/minute burst 2 packets log prefix \"ANF:PRIV UDP broadcast: \" level $LOGLEVEL"
   else
     echo " Logging of (other) packets to PRIVILEGED UDP ports disabled"
   fi
@@ -3411,9 +3411,9 @@ setup_ext_input_chain()
   ####################################################
   if [ "$UNPRIV_TCP_LOG" != "0" ]; then
     echo " Logging of (other) packets to UNPRIVILEGED TCP ports enabled"
-    nft_rule EXT_INPUT_CHAIN "tcp dport 1024-65535 limit rate 6/minute burst 2 packets log prefix \"AIF:UNPRIV TCP packet: \" level $LOGLEVEL"
-    nft_rule EXT_MULTICAST_CHAIN "tcp dport 1024-65535 limit rate 6/minute burst 2 packets log prefix \"AIF:UNPRIV TCP multicast: \" level $LOGLEVEL"
-    nft_rule EXT_BROADCAST_CHAIN "tcp dport 1024-65535 limit rate 6/minute burst 2 packets log prefix \"AIF:UNPRIV TCP broadcast: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "tcp dport 1024-65535 limit rate 6/minute burst 2 packets log prefix \"ANF:UNPRIV TCP packet: \" level $LOGLEVEL"
+    nft_rule EXT_MULTICAST_CHAIN "tcp dport 1024-65535 limit rate 6/minute burst 2 packets log prefix \"ANF:UNPRIV TCP multicast: \" level $LOGLEVEL"
+    nft_rule EXT_BROADCAST_CHAIN "tcp dport 1024-65535 limit rate 6/minute burst 2 packets log prefix \"ANF:UNPRIV TCP broadcast: \" level $LOGLEVEL"
   else
     echo " Logging of (other) packets to UNPRIVILEGED TCP ports disabled"
   fi
@@ -3422,9 +3422,9 @@ setup_ext_input_chain()
   ####################################################
   if [ "$UNPRIV_UDP_LOG" != "0" ]; then
     echo " Logging of (other) packets to UNPRIVILEGED UDP ports enabled"
-    nft_rule EXT_INPUT_CHAIN "udp dport 1024-65535 limit rate 6/minute burst 2 packets log prefix \"AIF:UNPRIV UDP packet: \" level $LOGLEVEL"
-    nft_rule EXT_MULTICAST_CHAIN "udp dport 1024 limit rate 6/minute burst 2 packets log prefix \"AIF:UNPRIV UDP multicast: \" level $LOGLEVEL"
-    nft_rule EXT_BROADCAST_CHAIN "udp dport 1024-65535 limit rate 6/minute burst 2 packets log prefix \"AIF:UNPRIV UDP broadcast: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "udp dport 1024-65535 limit rate 6/minute burst 2 packets log prefix \"ANF:UNPRIV UDP packet: \" level $LOGLEVEL"
+    nft_rule EXT_MULTICAST_CHAIN "udp dport 1024 limit rate 6/minute burst 2 packets log prefix \"ANF:UNPRIV UDP multicast: \" level $LOGLEVEL"
+    nft_rule EXT_BROADCAST_CHAIN "udp dport 1024-65535 limit rate 6/minute burst 2 packets log prefix \"ANF:UNPRIV UDP broadcast: \" level $LOGLEVEL"
   else
     echo "Logging of (other) packets to UNPRIVILEGED UDP ports disabled"
   fi
@@ -3433,7 +3433,7 @@ setup_ext_input_chain()
   #############################################
   if [ "$IGMP_LOG" != "0" ]; then
     echo " Logging of IGMP packets enabled"
-    nft_rule EXT_INPUT_CHAIN "meta nfproto ipv4 meta l4proto 2 limit rate 1/minute burst 5 packets log prefix \"AIF:IGMP packet: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "meta nfproto ipv4 meta l4proto 2 limit rate 1/minute burst 5 packets log prefix \"ANF:IGMP packet: \" level $LOGLEVEL"
   else
     echo " Logging of IPv4 IGMP packets disabled"
   fi
@@ -3446,20 +3446,20 @@ setup_ext_input_chain()
 
   if [ "$ICMP_REQUEST_LOG" != "0" ]; then
     echo " Logging of dropped ICMP-request(ping) packets enabled"
-    nft_rule EXT_INPUT_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
-    nft_rule EXT_INPUT_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
-    nft_rule EXT_MULTICAST_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-multicast-request: \" level $LOGLEVEL"
-    nft_rule EXT_MULTICAST_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-multicast-request: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule EXT_MULTICAST_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-multicast-request: \" level $LOGLEVEL"
+    nft_rule EXT_MULTICAST_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-multicast-request: \" level $LOGLEVEL"
   else
     echo " Logging of dropped ICMP-request(ping) packets disabled"
   fi
 
   if [ "$ICMP_OTHER_LOG" != "0" ]; then
     echo " Logging of dropped other ICMP packets enabled"
-    nft_rule EXT_INPUT_CHAIN "icmp type != echo-request limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-other: \" level $LOGLEVEL"
-    nft_rule EXT_INPUT_CHAIN "icmpv6 type != echo-request limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-other: \" level $LOGLEVEL"
-    nft_rule EXT_MULTICAST_CHAIN "icmp type != echo-request limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-multicast-other: \" level $LOGLEVEL"
-    nft_rule EXT_MULTICAST_CHAIN "icmpv6 type != echo-request limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-multicast-other: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "icmp type != echo-request limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-other: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "icmpv6 type != echo-request limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-other: \" level $LOGLEVEL"
+    nft_rule EXT_MULTICAST_CHAIN "icmp type != echo-request limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-multicast-other: \" level $LOGLEVEL"
+    nft_rule EXT_MULTICAST_CHAIN "icmpv6 type != echo-request limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-multicast-other: \" level $LOGLEVEL"
   else
     echo " Logging of dropped other ICMP packets disabled"
   fi
@@ -3478,7 +3478,7 @@ setup_ext_input_chain()
   #############################################
   if [ "$OTHER_IP_LOG" != "0" ]; then
     echo " Logging of other IP protocols (non TCP/UDP/ICMP/IGMP) packets enabled"
-    nft_rule EXT_INPUT_CHAIN "limit rate 1/minute burst 5 packets log prefix \"AIF:Other connect: \" level $LOGLEVEL"
+    nft_rule EXT_INPUT_CHAIN "limit rate 1/minute burst 5 packets log prefix \"ANF:Other connect: \" level $LOGLEVEL"
   else
     echo " Logging of other IP protocols (non TCP/UDP/ICMP/IGMP) packets disabled"
   fi
@@ -3499,41 +3499,41 @@ setup_ext_icmp_flood_chain()
   if [ "$ICMP_FLOOD_LOG" != "0" ]; then
     echo " Logging of ICMP flooding enabled"
 
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type destination-unreachable limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-unreachable flood: \" level $LOGLEVEL"
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type destination-unreachable limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-unreachable flood: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type destination-unreachable limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-unreachable flood: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type destination-unreachable limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-unreachable flood: \" level $LOGLEVEL"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type destination-unreachable jump POST_INPUT_DROP_CHAIN"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type destination-unreachable jump POST_INPUT_DROP_CHAIN"
 
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type time-exceeded limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-time-exceeded fld: \" level $LOGLEVEL"
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type time-exceeded limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-time-exceeded fld: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type time-exceeded limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-time-exceeded fld: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type time-exceeded limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-time-exceeded fld: \" level $LOGLEVEL"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type time-exceeded jump POST_INPUT_DROP_CHAIN"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type time-exceeded jump POST_INPUT_DROP_CHAIN"
 
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type parameter-problem limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-param-problem fld: \" level $LOGLEVEL"
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type parameter-problem limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-param-problem fld: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type parameter-problem limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-param-problem fld: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type parameter-problem limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-param-problem fld: \" level $LOGLEVEL"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type parameter-problem jump POST_INPUT_DROP_CHAIN"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type parameter-problem jump POST_INPUT_DROP_CHAIN"
 
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type echo-request limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-request(ping) fld: \" level $LOGLEVEL"
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type echo-request limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-request(ping) fld: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type echo-request limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-request(ping) fld: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type echo-request limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-request(ping) fld: \" level $LOGLEVEL"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type echo-request jump POST_INPUT_DROP_CHAIN"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type echo-request jump POST_INPUT_DROP_CHAIN"
 
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type echo-reply limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-reply(pong) flood: \" level $LOGLEVEL"
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type echo-reply limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-reply(pong) flood: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type echo-reply limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-reply(pong) flood: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type echo-reply limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-reply(pong) flood: \" level $LOGLEVEL"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type echo-reply jump POST_INPUT_DROP_CHAIN"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type echo-reply jump POST_INPUT_DROP_CHAIN"
 
-    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type source-quench limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-source-quench fld: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type source-quench limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-source-quench fld: \" level $LOGLEVEL"
     nft_rule EXT_ICMP_FLOOD_CHAIN "icmp type source-quench jump POST_INPUT_DROP_CHAIN"
 
     if [ "$IPV6_SUPPORT" = "1" ]; then
-      nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type packet-too-big limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP-packet-too-big fld: \" level $LOGLEVEL"
+      nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type packet-too-big limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP-packet-too-big fld: \" level $LOGLEVEL"
       nft_rule EXT_ICMP_FLOOD_CHAIN "icmpv6 type packet-too-big jump POST_INPUT_DROP_CHAIN"
     fi
 
     # All other ICMP into the general log rule
-    nft_rule EXT_ICMP_FLOOD_CHAIN "meta l4proto { icmp, ipv6-icmp } limit rate 12/hour burst 1 packets log prefix \"AIF:ICMP(other) flood: \" level $LOGLEVEL"
+    nft_rule EXT_ICMP_FLOOD_CHAIN "meta l4proto { icmp, ipv6-icmp } limit rate 12/hour burst 1 packets log prefix \"ANF:ICMP(other) flood: \" level $LOGLEVEL"
   else
     echo " Logging of ICMP flooding disabled"
   fi
@@ -3653,7 +3653,7 @@ setup_ext_output_chain()
           for srcip in $srcips; do
             for interface in $interfaces; do
               if [ "$INET_OUTPUT_DENY_LOG" != "0" ]; then
-                nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) tcp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:INET-OUTPUT denied: \" level $LOGLEVEL"
+                nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) tcp dport $port limit rate 1/second burst 1 packets log prefix \"ANF:INET-OUTPUT denied: \" level $LOGLEVEL"
               fi
               nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) tcp dport $port drop"
             done
@@ -3679,7 +3679,7 @@ setup_ext_output_chain()
           for srcip in $srcips; do
             for interface in $interfaces; do
               if [ "$INET_OUTPUT_DENY_LOG" != "0" ]; then
-                nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) udp dport $port limit rate 1/second burst 1 packets log prefix \"AIF:INET-OUTPUT denied: \" level $LOGLEVEL"
+                nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) udp dport $port limit rate 1/second burst 1 packets log prefix \"ANF:INET-OUTPUT denied: \" level $LOGLEVEL"
               fi
               nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) udp dport $port drop"
             done
@@ -3705,7 +3705,7 @@ setup_ext_output_chain()
           for srcip in $srcips; do
             for interface in $interfaces; do
               if [ "$INET_OUTPUT_DENY_LOG" != "0" ]; then
-                nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"AIF:INET-OUTPUT denied: \" level $LOGLEVEL"
+                nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"ANF:INET-OUTPUT denied: \" level $LOGLEVEL"
               fi
               nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) meta l4proto $proto drop"
             done
@@ -3793,7 +3793,7 @@ setup_ext_output_chain()
         for srcip in $srcips; do
           for interface in $interfaces; do
             if [ "$INET_OUTPUT_DENY_LOG" != "0" ]; then
-              nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) tcp dport $port limit rate 3/minute burst 5 packets log prefix \"AIF:INET-OUTPUT denied: \" level $LOGLEVEL"
+              nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) tcp dport $port limit rate 3/minute burst 5 packets log prefix \"ANF:INET-OUTPUT denied: \" level $LOGLEVEL"
             fi
             nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) tcp dport $port drop"
           done
@@ -3817,7 +3817,7 @@ setup_ext_output_chain()
         for srcip in $srcips; do
           for interface in $interfaces; do
             if [ "$INET_OUTPUT_DENY_LOG" != "0" ]; then
-              nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) udp dport $port limit rate 3/minute burst 5 packets log prefix \"AIF:INET-OUTPUT denied: \" level $LOGLEVEL"
+              nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) udp dport $port limit rate 3/minute burst 5 packets log prefix \"ANF:INET-OUTPUT denied: \" level $LOGLEVEL"
             fi
             nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) udp dport $port drop"
           done
@@ -3841,7 +3841,7 @@ setup_ext_output_chain()
         for srcip in $srcips; do
           for interface in $interfaces; do
             if [ "$INET_OUTPUT_DENY_LOG" != "0" ]; then
-              nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"AIF:INET-OUTPUT denied: \" level $LOGLEVEL"
+              nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) meta l4proto $proto limit rate 1/second burst 1 packets log prefix \"ANF:INET-OUTPUT denied: \" level $LOGLEVEL"
             fi
             nft_rule EXT_OUTPUT_CHAIN "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) meta l4proto $proto drop"
           done
@@ -3862,8 +3862,8 @@ setup_ext_output_chain()
   # Log incoming ICMP-request packets?
   ####################################
   if [ "$ICMP_REQUEST_LOG" != "0" -a "$INET_OUTPUT_DENY_LOG" != "0" ]; then
-    nft_rule EXT_OUTPUT_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
-    nft_rule EXT_OUTPUT_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"AIF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule EXT_OUTPUT_CHAIN "icmp type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
+    nft_rule EXT_OUTPUT_CHAIN "icmpv6 type echo-request limit rate 3/minute burst 1 packets log prefix \"ANF:ICMP-request: \" level $LOGLEVEL"
   fi
 
   # Drop (remaining) ICMP packets
@@ -3880,7 +3880,7 @@ setup_ext_output_chain()
     nft_rule EXT_OUTPUT_CHAIN "accept"
   else
     if [ "$INET_OUTPUT_DENY_LOG" != "0" ]; then
-      nft_rule EXT_OUTPUT_CHAIN "limit rate 1/second burst 1 packets log prefix \"AIF:INET-OUTPUT denied: \" level $LOGLEVEL"
+      nft_rule EXT_OUTPUT_CHAIN "limit rate 1/second burst 1 packets log prefix \"ANF:INET-OUTPUT denied: \" level $LOGLEVEL"
     fi
     echo " Denying all (other) ports/protocols"
     nft_rule EXT_OUTPUT_CHAIN "drop"
@@ -3948,7 +3948,7 @@ setup_input_log()
       for port in $ports; do
         for destip in $destips; do
           for interface in $interfaces; do
-            nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr daddr $destip) ct state new tcp dport $port limit rate 3/minute burst 15 packets log prefix \"AIF:TCP INPUT log: \" level $LOGLEVEL"
+            nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr daddr $destip) ct state new tcp dport $port limit rate 3/minute burst 15 packets log prefix \"ANF:TCP INPUT log: \" level $LOGLEVEL"
           done
         done
       done
@@ -3970,7 +3970,7 @@ setup_input_log()
       for port in $ports; do
         for destip in $destips; do
           for interface in $interfaces; do
-            nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr daddr $destip) ct state new udp dport $port limit rate 3/minute burst 15 packets log prefix \"AIF:UDP INPUT log: \" level $LOGLEVEL"
+            nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr daddr $destip) ct state new udp dport $port limit rate 3/minute burst 15 packets log prefix \"ANF:UDP INPUT log: \" level $LOGLEVEL"
           done
         done
       done
@@ -3991,7 +3991,7 @@ setup_input_log()
       for proto in $protos; do
         for destip in $destips; do
           for interface in $interfaces; do
-            nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr daddr $destip) ct state new meta l4proto $proto limit rate 3/minute burst 15 packets log prefix \"AIF:IP INPUT log: \" level $LOGLEVEL"
+            nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr daddr $destip) ct state new meta l4proto $proto limit rate 3/minute burst 15 packets log prefix \"ANF:IP INPUT log: \" level $LOGLEVEL"
           done
         done
       done
@@ -4013,7 +4013,7 @@ setup_input_log()
       for host in `nft_hosts "$hosts"`; do
         for destip in $destips; do
           for interface in $interfaces; do
-            nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) ct state new limit rate 12/minute burst 50 packets log prefix \"AIF:Hostwise INPUT log: \" level $LOGLEVEL"
+            nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) ct state new limit rate 12/minute burst 50 packets log prefix \"ANF:Hostwise INPUT log: \" level $LOGLEVEL"
           done
         done
       done
@@ -4035,7 +4035,7 @@ setup_input_log()
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
-              nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) ct state new tcp dport $port limit rate 12/minute burst 5 packets log prefix \"AIF:Hostwise TCP log (IN): \" level $LOGLEVEL"
+              nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) ct state new tcp dport $port limit rate 12/minute burst 5 packets log prefix \"ANF:Hostwise TCP log (IN): \" level $LOGLEVEL"
             done
           done
         done
@@ -4059,7 +4059,7 @@ setup_input_log()
         for port in $ports; do
           for destip in $destips; do
             for interface in $interfaces; do
-              nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) ct state new udp dport $port limit rate 12/minute burst 5 packets log prefix \"AIF:Hostwise UDP INPUT log: \" level $LOGLEVEL"
+              nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) ct state new udp dport $port limit rate 12/minute burst 5 packets log prefix \"ANF:Hostwise UDP INPUT log: \" level $LOGLEVEL"
             done
           done
         done
@@ -4082,7 +4082,7 @@ setup_input_log()
         for proto in $protos; do
           for destip in $destips; do
             for interface in $interfaces; do
-              nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) ct state new meta l4proto $proto limit rate 12/minute burst 5 packets log prefix \"AIF:Hostwise IP INPUT log: \" level $LOGLEVEL"
+              nft_rule INPUT "$(nft_if iifname "$interface") $(nft_addr saddr $host) $(nft_addr daddr $destip) ct state new meta l4proto $proto limit rate 12/minute burst 5 packets log prefix \"ANF:Hostwise IP INPUT log: \" level $LOGLEVEL"
             done
           done
         done
@@ -4110,7 +4110,7 @@ setup_output_log()
       for port in $ports; do
         for srcip in $srcips; do
           for interface in $interfaces; do
-            nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) ct state new tcp dport $port limit rate 3/minute burst 15 packets log prefix \"AIF:TCP OUTPUT log: \" level $LOGLEVEL"
+            nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) ct state new tcp dport $port limit rate 3/minute burst 15 packets log prefix \"ANF:TCP OUTPUT log: \" level $LOGLEVEL"
           done
         done
       done
@@ -4131,7 +4131,7 @@ setup_output_log()
       for port in $ports; do
         for srcip in $srcips; do
           for interface in $interfaces; do
-            nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) ct state new udp dport $port limit rate 3/minute burst 15 packets log prefix \"AIF:UDP OUTPUT log: \" level $LOGLEVEL"
+            nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) ct state new udp dport $port limit rate 3/minute burst 15 packets log prefix \"ANF:UDP OUTPUT log: \" level $LOGLEVEL"
           done
         done
       done
@@ -4152,7 +4152,7 @@ setup_output_log()
       for proto in $protos; do
         for srcip in $srcips; do
           for interface in $interfaces; do
-            nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) ct state new meta l4proto $proto limit rate 3/minute burst 15 packets log prefix \"AIF:IP OUTPUT log: \" level $LOGLEVEL"
+            nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) ct state new meta l4proto $proto limit rate 3/minute burst 15 packets log prefix \"ANF:IP OUTPUT log: \" level $LOGLEVEL"
           done
         done
       done
@@ -4173,7 +4173,7 @@ setup_output_log()
       for host in `nft_hosts "$hosts"`; do
         for srcip in $srcips; do
           for interface in $interfaces; do
-            nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) ct state new limit rate 12/minute burst 50 packets log prefix \"AIF:Hostwise OUTPUT log: \" level $LOGLEVEL"
+            nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) ct state new limit rate 12/minute burst 50 packets log prefix \"ANF:Hostwise OUTPUT log: \" level $LOGLEVEL"
           done
         done
       done
@@ -4196,7 +4196,7 @@ setup_output_log()
         for port in $ports; do
           for srcip in $srcips; do
             for interface in $interfaces; do
-              nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) ct state new tcp dport $port limit rate 12/minute burst 5 packets log prefix \"AIF:Host TCP log (OUT): \" level $LOGLEVEL"
+              nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) ct state new tcp dport $port limit rate 12/minute burst 5 packets log prefix \"ANF:Host TCP log (OUT): \" level $LOGLEVEL"
             done
           done
         done
@@ -4220,7 +4220,7 @@ setup_output_log()
         for port in $ports; do
           for srcip in $srcips; do
             for interface in $interfaces; do
-              nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) ct state new udp dport $port limit rate 12/minute burst 5 packets log prefix \"AIF:Host UDP log (OUT): \" level $LOGLEVEL"
+              nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) ct state new udp dport $port limit rate 12/minute burst 5 packets log prefix \"ANF:Host UDP log (OUT): \" level $LOGLEVEL"
             done
           done
         done
@@ -4243,7 +4243,7 @@ setup_output_log()
         for proto in $protos; do
           for srcip in $srcips; do
             for interface in $interfaces; do
-              nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) ct state new meta l4proto $proto limit rate 12/minute burst 5 packets log prefix \"AIF:Host IP log (OUT): \" level $LOGLEVEL"
+              nft_rule OUTPUT "$(nft_if oifname "$interface") $(nft_addr saddr $srcip) $(nft_addr daddr $host) ct state new meta l4proto $proto limit rate 12/minute burst 5 packets log prefix \"ANF:Host IP log (OUT): \" level $LOGLEVEL"
             done
           done
         done
@@ -4523,7 +4523,7 @@ plugins_start()
       # Preinit to 0, just in case
       PLUGIN_RET_VAL=0
 
-      # Store current amount of iptables rule warnings
+      # Store current amount of rule warnings
       STORE_RULE_WARNING=$RULE_WARNING
 
       # Set indent
@@ -4592,7 +4592,7 @@ plugins_stop()
           # Preinit to 0, just in case
           PLUGIN_RET_VAL=0
 
-          # Store current amount of iptables rule warnings
+          # Store current amount of rule warnings
           STORE_RULE_WARNING=$RULE_WARNING
 
           # Set indent
@@ -4843,7 +4843,7 @@ jobs_process_stop()
 }
 
 
-# Here the actual iptables rules are loaded
+# Here the actual firewall rules are loaded
 ###########################################
 setup_firewall_rules()
 {
@@ -4917,10 +4917,10 @@ setup_firewall_rules()
   plugins_start
 
   # Fragmented packets handling
-  # NOTE: Fragmentation cannot happen with IPv6 (and probably even not with iptables/IPv4)
+  # NOTE: Fragmentation cannot happen with IPv6 (and probably even not with IPv4)
   ########################################################################################
   if [ "$FRAG_DROP" = "1" ]; then
-    nft_rule OUTPUT "meta nfproto ipv4 ip frag-off & 0x1fff != 0 limit rate 3/minute burst 5 packets log prefix \"AIF:Fragment packet: \" level $LOGLEVEL"
+    nft_rule OUTPUT "meta nfproto ipv4 ip frag-off & 0x1fff != 0 limit rate 3/minute burst 5 packets log prefix \"ANF:Fragment packet: \" level $LOGLEVEL"
     nft_rule OUTPUT "meta nfproto ipv4 ip frag-off & 0x1fff != 0 drop"
   fi
 
@@ -5026,7 +5026,7 @@ setup_firewall_rules()
 
   # Everything else is logged & dropped in INPUT (just in case)...
   ################################################################
-  nft_rule INPUT "limit rate 1/second burst 5 packets log prefix \"AIF:Dropped INPUT packet: \" level $LOGLEVEL"
+  nft_rule INPUT "limit rate 1/second burst 5 packets log prefix \"ANF:Dropped INPUT packet: \" level $LOGLEVEL"
   nft_rule INPUT "drop"
 
   # Drop all packets at the end of the POST_INPUT_DROP_CHAIN
@@ -5366,7 +5366,7 @@ setup_firewall_rules()
   # Everything else is logged & dropped in FORWARD
   if [ "$FORWARD_DROP_LOG" != "0" ]; then
     echo " Logging of dropped FORWARD packets enabled"
-    nft_rule FORWARD "limit rate 1/minute burst 3 packets log prefix \"AIF:Dropped FORWARD packet: \" level $LOGLEVEL"
+    nft_rule FORWARD "limit rate 1/minute burst 3 packets log prefix \"ANF:Dropped FORWARD packet: \" level $LOGLEVEL"
   else
     echo " Logging of dropped FORWARD packets disabled"
   fi
@@ -5498,13 +5498,13 @@ show_status()
 
 show_start()
 {
-  echo "** Starting Arno's (NFT) Firewall(AIF) v$MY_VERSION **" |log_msg
+  echo "** Starting Arno's (NFT) Firewall(ANF) v$MY_VERSION **" |log_msg
 }
 
 
 show_restart()
 {
-  echo "** Restarting Arno's (NFT) Firewall(AIF) v$MY_VERSION **" |log_msg
+  echo "** Restarting Arno's (NFT) Firewall(ANF) v$MY_VERSION **" |log_msg
 }
 
 
@@ -5517,8 +5517,8 @@ show_failed()
 show_stop()
 {
   DATE=`LC_ALL=C date +'%b %d %H:%M:%S'`
-  echo "$DATE Stopping Arno's (NFT) Firewall(AIF) v$MY_VERSION"
-  echo "** Stopping Arno's (NFT) Firewall(AIF) v$MY_VERSION **" |log_msg
+  echo "$DATE Stopping Arno's (NFT) Firewall(ANF) v$MY_VERSION"
+  echo "** Stopping Arno's (NFT) Firewall(ANF) v$MY_VERSION **" |log_msg
 }
 
 

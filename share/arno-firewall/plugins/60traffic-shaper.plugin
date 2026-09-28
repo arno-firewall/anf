@@ -1,12 +1,12 @@
 # ------------------------------------------------------------------------------
-#  -= Arno's (NFT) Firewall(AIF) - (HTB/HFSC/CFQ) traffic shaper plugin =-
+#  -= Arno's (NFT) Firewall(ANF) - (HTB/HFSC/CFQ) traffic shaper plugin =-
 #
 PLUGIN_NAME="Traffic Shaper Plugin"
 PLUGIN_VERSION="1.2.2a"
 PLUGIN_CONF_FILE="traffic-shaper.conf"
 #
 # Last changed          : July 21, 2015
-# Requirements          : kernel 2.6 + iproute
+# Requirements          : ANF 3.0.0 (or newer) + iproute
 # Comments              : This plugin will shape traffic. It borrows heavily on
 #                         the logic of Maciej's original script (below), with
 #                         some minor changes to the actual bins that traffic
@@ -257,7 +257,7 @@ plugin_start_hfsc()
       incoming_traffic_limit $eif1 || retval=1
     done
 
-    # add SHAPER_CHAIN chain to mangle table in iptables
+    # add SHAPER_CHAIN chain to mangle table
     nft_rule MANGLE_POSTROUTING "$(nft_if oifname $eif) jump SHAPER_CHAIN"
   done
 
@@ -323,7 +323,7 @@ plugin_start_htb()
       incoming_traffic_limit $eif1 || retval=1
     done
 
-    # add SHAPER_CHAIN chain to mangle table in iptables
+    # add SHAPER_CHAIN chain to mangle table
     nft_rule MANGLE_POSTROUTING "$(nft_if oifname $eif) jump SHAPER_CHAIN"
   done
 

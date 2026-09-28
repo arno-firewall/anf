@@ -1,12 +1,12 @@
 # ------------------------------------------------------------------------------
-#          -= Arno's (NFT) Firewall(AIF) - Linux UPnP IGD plugin =-
+#          -= Arno's (NFT) Firewall(ANF) - Linux UPnP IGD plugin =-
 #
 PLUGIN_NAME="Linux UPnP IGD plugin"
 PLUGIN_VERSION="1.0a"
 PLUGIN_CONF_FILE="linux-upnp-igd.conf"
 #
 # Last changed          : October 10, 2011
-# Requirements          : kernel 2.6 + linux-igd
+# Requirements          : ANF 3.0.0 (or newer) + linux-igd
 # Comments              : An UPnP-enabled application can tell linux-igd what public ports
 #                         have to be forwarded back to the application.
 #                         This plugin adds a new chain into the FORWARD chain

@@ -1,10 +1,10 @@
-.TH "ARNO-FIREWALL" "8" "2020-03-25" "Sven Geuer" "AIF Manual"
+.TH "ARNO-FIREWALL" "8" "2020-03-25" "Sven Geuer" "ANF Manual"
 .SH "NAME"
-arno\-firewall \- Single\- & multi\-homed firewall script with DSL/ADSL support.
+arno\-firewall \- Single\- & multi\-homed firewall script.
 .SH "SYNOPSIS"
 \fBarno\-firewall\fR start | restart | force-reload | stop | stop-block | status | status\-plugins | check-conf
 .SH "DESCRIPTION"
-\fBarno\-firewall\fR is an iptables configuration script with support for both IPv4 & IPv6. In general, it should not be called directly, but rather should be invoked via \fI/etc/init.d/arno\-firewall\fR or \fIsystemctl\~COMMAND\~arno\-firewall.service\fR, depending on the init system in use. While it is extremely easy to set up a basic firewall one can nevertheless configure it to meet quite complex requirements.
+\fBarno\-firewall\fR is an nft configuration script with support for both IPv4 & IPv6. In general, it should not be called directly, but rather should be invoked via \fI/etc/init.d/arno\-firewall\fR or \fIsystemctl\~COMMAND\~arno\-firewall.service\fR, depending on the init system in use. While it is extremely easy to set up a basic firewall one can nevertheless configure it to meet quite complex requirements.
 .P
 All available options are explained in the extensively documented configuration file.
 .P
@@ -12,7 +12,7 @@ As a bare minimum the external interface of the system needs to be set up proper
 .P
 Instead of editing the main configuration file, it is recommended to put configuration snippets into .conf files to be placed in the configuration directory. These are sourced after the main configuration file has been read and can be used to override previous (default) configurations.
 .P
-For additional requirements not covered by the configuration file and not coverable by configuration snippets custom iptables rules can be placed in a custom rules file. This file is automatically parsed by the service script. 
+For additional requirements not covered by the configuration file and not coverable by configuration snippets custom nft rules can be placed in a custom rules file. This file is automatically parsed by the service script. 
 .P
 Logs are written to a dedicated log file if \fBrsyslogd\fR is in use. The \fBarno\-fwfilter\fR script can be used to make the firewall logs more readable for humans (see manpage).
 .P
@@ -29,7 +29,7 @@ firewall configuration directory
 plugins configuration directory
 .TP
 .I /etc/arno\-firewall/custom\-rules
-custom iptables rules file
+custom nft rules file
 .TP
 .I /etc/arno\-firewall/blocked\-hosts
 host blacklist. This file does not pre-exist and its use is disabled in the main configuration file by default.
@@ -37,10 +37,10 @@ host blacklist. This file does not pre-exist and its use is disabled in the main
 .I /var/log/arno\-firewall
 log file maintained by rsyslogd
 .SH "SEE ALSO"
-.BR iptables "(8)",
+.BR nft "(8)",
 .BR arno\-fwfilter "(1)",
 .I /usr/local/share/doc/arno-firewall/README.gz,
-.I https://github.com/arno-iptables-firewall/aif
+.I https://github.com/arno-firewall/anf
 .SH "AUTHORS"
 arno\-firewall was written by Arno van Amersfoort <arnova@rocky.eld.leidenuniv.nl> and Lonnie Abelbeck <lonnie@abelbeck.com>.
 .P 

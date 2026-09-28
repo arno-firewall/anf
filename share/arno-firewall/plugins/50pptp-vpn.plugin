@@ -1,16 +1,16 @@
 # ------------------------------------------------------------------------------
-#             -= Arno's (NFT) Firewall(AIF) - PPTP VPN plugin =-
+#             -= Arno's (NFT) Firewall(ANF) - PPTP VPN plugin =-
 #
 PLUGIN_NAME="PPTP VPN plugin"
 PLUGIN_VERSION="1.00 BETA"
 PLUGIN_CONF_FILE="pptp-vpn.conf"
 #
 # Last changed          : February 21, 2011
-# Requirements          : AIF 2.0.0+
+# Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This plugin adds all required rules for using a PPTP Server.
 #
 # Author                : (C) Copyright 2011 by Lonnie Abelbeck & Arno van Amersfoort
-# Web                   : https://github.com/arno-iptables-firewall/aif
+# Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .
 #                         at the proper locations!)
@@ -78,9 +78,9 @@ plugin_start()
     IFS=' ,'
     for host in $PPTP_VPN_DENY_HOSTS; do
       if [ "$PPTP_VPN_DENY_LOG" = "1" ]; then
-        nft_rule PPTP_VPN_INPUT "$(nft_addr daddr $host) limit rate 3/minute burst 5 packets log prefix \"AIF:PPTP-VPN denied: \" level $LOGLEVEL"
-        nft_rule PPTP_VPN_FORWARD_IN "$(nft_addr daddr $host) limit rate 3/minute burst 5 packets log prefix \"AIF:PPTP-VPN denied: \" level $LOGLEVEL"
-        nft_rule PPTP_VPN_FORWARD_OUT "$(nft_addr saddr $host) limit rate 3/minute burst 5 packets log prefix \"AIF:PPTP-VPN denied: \" level $LOGLEVEL"
+        nft_rule PPTP_VPN_INPUT "$(nft_addr daddr $host) limit rate 3/minute burst 5 packets log prefix \"ANF:PPTP-VPN denied: \" level $LOGLEVEL"
+        nft_rule PPTP_VPN_FORWARD_IN "$(nft_addr daddr $host) limit rate 3/minute burst 5 packets log prefix \"ANF:PPTP-VPN denied: \" level $LOGLEVEL"
+        nft_rule PPTP_VPN_FORWARD_OUT "$(nft_addr saddr $host) limit rate 3/minute burst 5 packets log prefix \"ANF:PPTP-VPN denied: \" level $LOGLEVEL"
       fi
       nft_rule PPTP_VPN_INPUT "$(nft_addr daddr $host) drop"
       nft_rule PPTP_VPN_FORWARD_IN "$(nft_addr daddr $host) drop"

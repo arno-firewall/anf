@@ -1,17 +1,17 @@
 # ------------------------------------------------------------------------------
-#        -= Arno's (NFT) Firewall(AIF) - Traffic Accounting plugin =-
+#        -= Arno's (NFT) Firewall(ANF) - Traffic Accounting plugin =-
 #
 PLUGIN_NAME="Traffic Accounting plugin"
 PLUGIN_VERSION="1.31"
 PLUGIN_CONF_FILE="traffic-accounting.conf"
 #
 # Last changed          : May 9, 2019
-# Requirements          : AIF 2.1.0 (or newer)
+# Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This implements support for traffic accounting for
 #                         IPv4 & IPv6. It has support for dynamic host resolving
 #
 # Author                : (C) Copyright 2008-2019 by Arno van Amersfoort
-# Web                   : https://github.com/arno-iptables-firewall/aif
+# Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .
 #                         at the proper locations!)

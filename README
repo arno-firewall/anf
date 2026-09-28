@@ -1,10 +1,10 @@
-                    -= Arno's (NFT) Firewall(AIF) =-
-         Single- & multi-homed firewall script with DSL/ADSL support
+                    -= Arno's (NFT) Firewall(ANF) =-
+                  Single- & multi-homed firewall script
 
                       ~ In memory of my dear parents ~
 
-(C) Copyright 2001-2024 by Arno van Amersfoort & Lonnie Abelbeck
-Web        : https://github.com/arno-iptables-firewall/aif
+(C) Copyright 2001-2026 by Arno van Amersfoort & Lonnie Abelbeck
+Web        : https://github.com/arno-firewall/anf
 Email      : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
              (note: you must remove all spaces and substitute the @ and the .
              at the proper locations!)
@@ -47,7 +47,7 @@ troubleshooting section below!
 An explanation of the files in the package:
 -------------------------------------------
 /bin/arno-firewall :
-        The actual firewall script, core of Arno's (NFT) Firewall(AIF).
+        The actual firewall script, core of Arno's (NFT) Firewall(ANF).
         You should put this file in eg. /usr/local/sbin/ . You should make
         sure it's executable (use "chmod 700 or chmod +x).
 
@@ -62,7 +62,7 @@ An explanation of the files in the package:
         should put this file in eg. /usr/local/bin/.
 
 /etc/arno-firewall/firewall.conf :
-        The configuration file used for Arno's (NFT) Firewall(AIF).
+        The configuration file used for Arno's (NFT) Firewall(ANF).
         Normally you should put it in /etc/arno-firewall/. Make sure
         root is owner/group (with "chown 0:0").
 
@@ -75,7 +75,7 @@ An explanation of the files in the package:
         file has been read.
 
 /etc/arno-firewall/custom-rules :
-        Put any (iptables) custom rules in this file. This file
+        Put any (nft) custom rules in this file. This file
         should be put in /etc/arno-firewall/ . Make sure root
         is owner/group (with "chown 0:0").
 
@@ -129,7 +129,7 @@ An explanation of the files in the package:
 -----------------------------------------
 | Some IMPORTANT (security) information |
 -----------------------------------------
-1) If possible try to start the firewall before you enable your (ADSL) internet
+1) If possible try to start the firewall before you enable your internet
    connection. For an ppp-interface that doesn't exist yet
    you can use the wildcard device called "ppp+" (but you can only use
    ppp+ if there aren't any other ppp interfaces!).
@@ -206,12 +206,12 @@ features are enabled by default to protect you from hostile attacks.
 
 1) First we've to check whether your Linux setup is OK in order to make the
    script work correctly:
-        - It needs iptables and iproute(2) to be installed (probably come 
+        - It needs nft and iproute(2) to be installed (probably come 
           as packages with your distro).
         - It requires a POSIX compliant /bin/sh (should live on any UNIX system
           by default)
         - My scripts need the following binaries (in your path): 
-          iptables (obviously), ip (from the iproute package), sysctl, modprobe,
+          nft (obviously), ip (from the iproute package), sysctl, modprobe,
           logger, uname, date, awk, tr, grep, sed, cut, head, tail, wc, which,
           & cat.
         - If you plan to use DNS resolving (eg. for certain plugins) then the
@@ -341,7 +341,7 @@ Troubleshooting: What if it doesn't work?:
       "127.0.0.0/24" for his local subnet. "127.0.0.0" is the address of the
       local loopback and therefor should never ever appear in the configuration
       file!
-2)  Obtain the latest version of your (distribution) kernel & iptables.
+2)  Obtain the latest version of your (distribution) kernel & nft.
 3)  Make sure your (self-built) kernel supports all required options.
 4)  Carefully inspect the output generated when issueing
     "arno-firewall start"
@@ -409,28 +409,28 @@ Notes on writing your own plugins
 7)  Plugins can use all variables/functions/chains from the main-script and
     main configuration file. Plugin specific configuration variables should be
     put inside the plugin's configuration file (.conf).
-8)  Make sure that when you create new iptables-chains, they don't conflict
-    with the main script or other plugins. The same goes for the iptables
+8)  Make sure that when you create new nft-chains, they don't conflict
+    with the main script or other plugins. The same goes for the nft
     MARK-module, make sure that you use an unique MARK-number that doesn't
     conflict with other plugins.
 9)  Plugins should in principle always cleanup up their own chains (and
     possibly other stuff) they created at start when stopping.
-10) A list of available chains created by AIF's main script can be found below.
-    Note that I strongly recommend NOT to directly use any builtin iptables
+10) A list of available chains created by ANF's main script can be found below.
+    Note that I strongly recommend NOT to directly use any builtin nft
     chains like INPUT/OUTPUT/FORWARD/PREROUTING/POSTROUTING. Only do this when
     it's absolutely necessary!
 
 
-Available iptables chains created by Arno's (NFT) Firewall
+Available chains created by Arno's (NFT) Firewall
 -------------------------------------------------------------
-BASE_INPUT_CHAIN            - Base input chain. For internal use by AIF only!
-BASE_OUTPUT_CHAIN           - Base output chain. For internal use by AIF only!
-BASE_FORWARD_CHAIN          - Base forward chain. For internal use by AIF only!
-INPUT_CHAIN                 - AIF's main INPUT chain. Use this if you want to
+BASE_INPUT_CHAIN            - Base input chain. For internal use by ANF only!
+BASE_OUTPUT_CHAIN           - Base output chain. For internal use by ANF only!
+BASE_FORWARD_CHAIN          - Base forward chain. For internal use by ANF only!
+INPUT_CHAIN                 - ANF's main INPUT chain. Use this if you want to
                               insert rules in the INPUT chain
-OUTPUT_CHAIN                - AIF's main OUTPUT chain. Use this if you want to
+OUTPUT_CHAIN                - ANF's main OUTPUT chain. Use this if you want to
                               insert rules in the OUTPUT chain
-FORWARD_CHAIN               - AIF's main FORWARD chain. Use this if you want to
+FORWARD_CHAIN               - ANF's main FORWARD chain. Use this if you want to
                               insert rules in the FORWARD chain
 EXT_INPUT_CHAIN             - External-net INPUT chain
 EXT_OUTPUT_CHAIN            - External-net OUTPUT chain
@@ -453,7 +453,7 @@ HOST_BLOCK_SRC_DROP         - Chain where packets from dropped inbound blocked h
 HOST_BLOCK_DST_DROP         - Chain where packets from dropped outbound blocked hosts go
 INT_INPUT_CHAIN             - Internal-net INPUT chain
 INT_OUTPUT_CHAIN            - Internal-net OUTPUT chain
-LAN_LAN_FORWARD_CHAIN       - LAN to LAN (Inter-LAN) forward chain (AIF private use only)
+LAN_LAN_FORWARD_CHAIN       - LAN to LAN (Inter-LAN) forward chain (ANF private use only)
 LAN_INET_FORWARD_CHAIN      - LAN to internet (external net) forward chain
 POST_INPUT_CHAIN            - This chain is always processed last(post) in the
                               INPUT chain
@@ -499,120 +499,3 @@ external IPs to NAT_STATIC_IP. That's it!
 
 NOTE: Redundant connections are (currently) not supported! This is limitation
 of the (current) Linux kernel (not of my firewall).
-
-
-Info when building your own kernel (2.4 & 2.6) through "make menuconfig":
--------------------------------------------------------------------------------
-For the firewall to work properly you need the following options enabled (as
-modules or compiled in your kernel):
-- "Loadable module support"
-        - "Enable loadable module support" (If you want to build iptables as
-           modules)
-        - "Automatic kernel module loading" (Strongly recommended if you build
-           iptables as modules) (Only available in newer 2.6 kernels)
-- "Networking", "Networking Support", "Networking Options" :
-        - "Packet socket" (If you want to use dhcp client and/or server)
-        - "TCP/IP networking"
-                - "IP: Multicasting"
-                - "IP: advanced router"
-                        - "IP: policy routing" (If you want to use load
-                           balancing, eg. multiroute masquerading)
-                        - "IP: equal cost multipath" (If you want to use load
-                           balancing, eg. multiroute masquerading)
-                - "IP: TCP syncookie support"
-        - ("Network packet filtering")
-                - "Core Netfilter Configuration" (For kernel =>2.6.16)
-                        - "Netfilter Xtables support (Required for ip_tables)"
-                                - "MARK" target support (Only required for
-                                   special purposes like eg. traffic shaping
-                                   & kernel 2.6 VPN support)
-                                - "conntrack" connection tracking match support
-                                - "limit" match support
-                                - "mac" address match support (If you want to
-                                   use MAC filtering)
-                                - "state" match support
-                                - "tcpmss" match support (If you want to use
-                                   tcpmss clamping)
-                - "IP: Netfilter Configuration":
-                        - "Connection tracking"
-                                - "Connection tracking flow accounting" (If you
-                                   want to do accounting on your network traffic.
-                                   (kernel 2.6 only)
-                                - "FTP protocol support"
-                        - "IP tables support" (NOTE: The order of sub-options can
-                           differ between kernel versions):
-                                - "Multiple port match support"
-                                - "TOS match support" (If you want to use TOS
-                                   mangling)
-                                - "recent match support" (required for IDS
-                                   & SSH brute-force protection)
-                                - "TTL match support" (If you want to use TTL
-                                   manipulation)
-                                - "limit match support" (kernel <2.6.16)
-                                - "MAC address match support" (If you want to
-                                   use MAC filtering) (kernel <2.6.16)
-                                - "Multiple port match support" (kernel <2.6.16)
-                                - "tcpmss match support" (If you use tcpmss
-                                   clamping) (kernel <2.6.16)
-                                - "Connection state match support"
-                                   (Kernel <2.6.16)
-                                - "Packet filtering" (kernel <2.6.16)
-                                        - "REJECT target support"
-                                - "LOG target support"
-                                - "TCPMSS target support (If you want to use
-                                   tcpmss-clamping)
-                                - "Full NAT" (If you use NAT/masquerading aka
-                                   internet-sharing or transparent proxies)
-                                        - "MASQUERADE target" (If you want to
-                                           use masquerading)
-                                        - "REDIRECT target support" (If you
-                                           want to use port- forwarding,
-                                           -redirection or transparent proxies)
-                                - "Packet mangling"
-                                        - "TOS target support" (If you want to
-                                           use TOS mangling)
-                                        - "MARK target support" (Only required
-                                           for special purposes like eg. traffic
-                                           shaping & kernel 2.6 VPN support)
-                                           (kernel <2.6.16)
-                                        - "TTL target support" (if you want to
-                                           use TTL manipulation
-
-
-Kernel configuration - Special issues
--------------------------------------
-Some kernel versions, or series of versions, may have unique issues, below are
-topics related to the scope of this firewall script.
-
-1) Starting with kernel version 2.6.27, CONFIG_NF_CT_ACCT is deprecated, the
-   result when the "nf_conntrack" module is loaded and the kernel has
-   CONFIG_NF_CT_ACCT=y set, the following message is displayed:
-
-     "CONFIG_NF_CT_ACCT is deprecated and will be removed soon. Please use
-     nf_conntrack.acct=1 kernel paramater, acct=1 nf_conntrack module option or
-     sysctl net.netfilter.nf_conntrack_acct=1 to enable it."
-
-   The message is harmless, and can be safely ignored. The main script also
-   sets net.netfilter.nf_conntrack_acct=1 in the case CONFIG_NF_CT_ACCT is not
-   set.
-
-   Though, if you find this message annoying, it can be silenced via
-   "make menuconfig":
-
-       -- Core Netfilter Configuration --
-     <M> Netfilter connection tracking support
-     [ ]   Connection tracking flow accounting
-
-   if "Connection tracking flow accounting" can't be disabled, then disabling
-
-     < >   "connbytes" per-connection counter match support
-
-   may be required because of dependencies.  The resulting configuration
-   settings are:
-
-     CONFIG_NF_CONNTRACK=m
-     # CONFIG_NF_CT_ACCT is not set
-     # CONFIG_NETFILTER_XT_MATCH_CONNBYTES is not set
-
-   CONFIG_NF_CT_ACCT was scheduled to be removed in 2.6.29, but has not yet
-   been removed, as of writing.

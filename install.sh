@@ -1,15 +1,15 @@
 #!/bin/bash
 
-MY_VERSION="1.14d"
+MY_VERSION="1.15"
 
 # ------------------------------------------------------------------------------------------
-#                         -= Arno's (NFT) Firewall(AIF) =-
-#              Single- & multi-homed firewall script with DSL/ADSL support
+#                         -= Arno's (NFT) Firewall(ANF) =-
+#                       Single- & multi-homed firewall script
 #
 #                           ~ In memory of my dear parents ~
 #
-# (C) Copyright 2001-2023 by Arno van Amersfoort
-# Web                   : https://github.com/arno-iptables-firewall/aif
+# (C) Copyright 2001-2026 by Arno van Amersfoort
+# Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .
 #                         at the proper locations!)
@@ -509,9 +509,9 @@ setup_start_scripts()
 
 
 # main line:
-AIF_VERSION="$(grep "MY_VERSION=" ./bin/arno-firewall |sed -e "s/^MY_VERSION=\"//" -e "s/\"$//")"
+ANF_VERSION="$(grep "MY_VERSION=" ./bin/arno-firewall |sed -e "s/^MY_VERSION=\"//" -e "s/\"$//")"
 
-printf "\033[40m\033[1;32mArno's (NFT) Firewall Script(AIF) v$AIF_VERSION\033[0m\n"
+printf "\033[40m\033[1;32mArno's (NFT) Firewall Script(ANF) v$ANF_VERSION\033[0m\n"
 printf "Install Script v$MY_VERSION\n"
 echo "-------------------------------------------------------------------------------"
 
