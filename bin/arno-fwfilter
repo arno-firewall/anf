@@ -5,12 +5,9 @@
 
 # Usage examples (make sure arno-fwfilter is executable!):
 # --------------------------------------------------------
-# Static firewall log filtering                         : cat /var/log/messages |arno-fwfilter
-# or
-# Static firewall log filtering                         : cat /var/log/arno-firewall |arno-fwfilter
-# Realtime firewall logging on TTY10                    : tail --follow /var/log/messages |fwfilter >/dev/tty10 &
-# Example on how to disable kernel debug logging        : cat /var/log/messages |grep -v kernel |arno-fwfilter
-# Email firewall logs to root                           : cat /var/log/arno-firewall |arno-fwfilter --html-output --no-colors |mail -s "Firewall Log" -a "Content-Type: text/html; charset=us-ascii" root
+# Static firewall log filtering                         : journalctl -k |grep "kernel: ANF" |arno-fwfilter
+# Realtime firewall log filtering                       : journalctl -k -f |grep --line-buffered "kernel: ANF" |arno-fwfilter
+# Email firewall logs to root                           : journalctl -k |grep "kernel: ANF" |arno-fwfilter --html-output --no-colors |mail -s "Firewall Log" -a "Content-Type: text/html; charset=us-ascii" root
 
 # ------------------------------------------------------------------------------------------
 #                     -= Arno's (NFT) Firewall(ANF) =-
