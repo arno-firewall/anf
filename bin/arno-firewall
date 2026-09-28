@@ -5402,6 +5402,9 @@ setup_firewall_rules()
     return 1
   fi
 
+  # Now that this version is active, remove what the iptables version left behind
+  remove_iptables_version
+
   check_foreign_drop_policies
 }
 

@@ -168,6 +168,42 @@ kernel_ver_chk()
 # nf_conntrack helper assignment
 # Example: load_conntrack_helper_module ftp tcp 21
 ##
+# Remove the rules of the iptables version (Arno's Iptables Firewall), so they don't
+# interfere with this version. A running one is recognised by its BASE_INPUT_CHAIN.
+# A stopped one leaves only a FORWARD policy of DROP (and with stop-block a few
+# INPUT/loopback rules), that is removed when the iptables version is (or was)
+# installed and iptables holds nothing else
+remove_iptables_version()
+{
+  local cmd table
+
+  for cmd in iptables ip6tables; do
+    if ! check_command $cmd; then
+      continue
+    fi
+
+    if $cmd -n -L BASE_INPUT_CHAIN >/dev/null 2>&1; then
+      echo "Removing the rules of the (running) iptables version ($cmd)"
+    elif [ -e /etc/arno-iptables-firewall -o -e /usr/local/sbin/arno-iptables-firewall -o -e /usr/sbin/arno-iptables-firewall ] &&
+         $cmd-save 2>/dev/null |grep -q -e '^:[A-Z]* DROP ' -e '^-A ' &&
+         ! $cmd-save 2>/dev/null |grep '^-A ' |grep -q -v -E \
+           -e '^-A INPUT -i [^ ]+ -j DROP$' -e '^-A (INPUT|FORWARD) -i lo -j ACCEPT$' -e '^-A OUTPUT -o lo -j ACCEPT$'; then
+      echo "Removing what the (stopped) iptables version left behind ($cmd)"
+    else
+      continue
+    fi
+
+    for table in filter nat mangle raw; do
+      $cmd -t $table -F 2>/dev/null
+      $cmd -t $table -X 2>/dev/null
+    done
+    $cmd -P INPUT ACCEPT
+    $cmd -P FORWARD ACCEPT
+    $cmd -P OUTPUT ACCEPT
+  done
+}
+
+
 # Usage: load_conntrack_helper_module HELPER PROTO PORTS
 load_conntrack_helper_module()
 {

@@ -387,39 +387,6 @@ migrate_iptables_version()
 }
 
 
-# Remove the rules of the iptables version (only call once this version is running).
-# A stopped iptables version leaves no rules, but a FORWARD policy of DROP, which
-# is reset as well when the iptables version was found and iptables holds no rules
-# at all (so nothing else uses it)
-flush_iptables_version()
-{
-  local cmd table
-
-  for cmd in iptables ip6tables; do
-    if ! check_command $cmd; then
-      continue
-    fi
-
-    if $cmd -n -L BASE_INPUT_CHAIN >/dev/null 2>&1; then
-      for table in filter nat mangle raw; do
-        $cmd -t $table -F 2>/dev/null
-        $cmd -t $table -X 2>/dev/null
-      done
-      $cmd -P INPUT ACCEPT
-      $cmd -P FORWARD ACCEPT
-      $cmd -P OUTPUT ACCEPT
-      echo "* Removed the rules of the iptables version ($cmd)"
-    elif [ "$IPTABLES_VERSION_FOUND" = "1" ] && ! $cmd-save 2>/dev/null |grep -q '^-A' &&
-         $cmd-save 2>/dev/null |grep -q '^:[A-Z]* DROP '; then
-      $cmd -P INPUT ACCEPT
-      $cmd -P FORWARD ACCEPT
-      $cmd -P OUTPUT ACCEPT
-      echo "* Reset the DROP policies left behind by the (stopped) iptables version ($cmd)"
-    fi
-  done
-}
-
-
 # Check if rules of the iptables version are (still) loaded
 iptables_version_running()
 {
@@ -627,10 +594,8 @@ echo "--------------------------------------------------------------------------
 echo ""
 
 if get_user_yn "(Re)start firewall"; then
-  # Only remove the rules of the iptables version once this version is running
-  if /usr/local/sbin/arno-firewall restart; then
-    flush_iptables_version
-  fi
+  # This also removes the rules of the iptables version, once this version is running
+  /usr/local/sbin/arno-firewall restart
 fi
 
 if iptables_version_running; then
