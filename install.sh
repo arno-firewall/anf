@@ -324,7 +324,7 @@ check_dist_version()
 # Migrate an installation of the iptables version (arno-iptables-firewall)
 migrate_iptables_version()
 {
-  local OLD_ETC="/etc/arno-iptables-firewall" old_conf=0 old_prog=0
+  local OLD_ETC="/etc/arno-iptables-firewall" old_conf=0 old_prog=0 old_enabled=0
 
   # Its configuration is only taken over once, the old directory is kept as a backup
   if [ -d "$OLD_ETC" -a ! -e /etc/arno-firewall ]; then
@@ -341,7 +341,16 @@ migrate_iptables_version()
     IPTABLES_VERSION_FOUND=1
   fi
 
-  if [ $old_conf -eq 0 -a $old_prog -eq 0 ]; then
+  # Is its service started at boot?
+  if [ $old_prog -eq 1 ]; then
+    if check_command systemctl && systemctl is-enabled arno-iptables-firewall >/dev/null 2>&1; then
+      old_enabled=1
+    elif ls /etc/rc[2-5].d/S*arno-iptables-firewall /etc/rc.d/rc[2-5].d/S*arno-iptables-firewall >/dev/null 2>&1; then
+      old_enabled=1
+    fi
+  fi
+
+  if [ $old_conf -eq 0 -a $old_enabled -eq 0 ]; then
     return 0
   fi
 
@@ -360,32 +369,19 @@ migrate_iptables_version()
     fi
   fi
 
-  # Remove its program and service, otherwise both would start at boot
-  if [ $old_prog -eq 1 ] && get_user_yn "Remove the old program and its service (both would start at boot otherwise)" "y"; then
+  # It stays installed (both versions can be used side by side), but shouldn't
+  # start at boot as well
+  if [ $old_enabled -eq 1 ] && get_user_yn "Disable the service of the iptables version at boot (it stays installed, both would start at boot otherwise)" "y"; then
     if check_command systemctl; then
       systemctl disable arno-iptables-firewall 2>/dev/null
     fi
     if check_command update-rc.d; then
-      update-rc.d -f arno-iptables-firewall remove
+      update-rc.d arno-iptables-firewall disable 2>/dev/null
     elif check_command chkconfig; then
-      chkconfig --del arno-iptables-firewall
+      chkconfig arno-iptables-firewall off 2>/dev/null
     fi
-
-    rm -fv /etc/init.d/arno-iptables-firewall
-    rm -fv /etc/rc.d/rc*.d/*arno-iptables-firewall
-    rm -fv /etc/rc*.d/*arno-iptables-firewall
-    rm -fv /usr/lib/systemd/system/arno-iptables-firewall.service
-    rm -fv /lib/systemd/system/arno-iptables-firewall.service
-    rm -fv /etc/systemd/system/arno-iptables-firewall.service
-    rm -fv /usr/local/sbin/arno-iptables-firewall
-    if readlink /usr/local/sbin/traffic-accounting-show |grep -q '/arno-iptables-firewall/'; then
-      rm -fv /usr/local/sbin/traffic-accounting-show
-    fi
-    rm -rf /usr/local/share/arno-iptables-firewall && echo "removed directory '/usr/local/share/arno-iptables-firewall'"
-    rm -fv /usr/local/share/man/man8/arno-iptables-firewall.8.gz
-    rm -rf /usr/local/share/doc/arno-iptables-firewall && echo "removed directory '/usr/local/share/doc/arno-iptables-firewall'"
-    rm -fv /etc/logrotate.d/arno-iptables-firewall
-    rm -fv /etc/rsyslog.d/arno-iptables-firewall.conf
+    echo "* Disabled the service of the iptables version at boot, re-enable it with eg."
+    echo "  \"systemctl enable arno-iptables-firewall\" (and disable arno-firewall)"
   fi
 
   return 0

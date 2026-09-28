@@ -96,16 +96,31 @@ if ! get_user_yn "Continue uninstall" "n"; then
   exit 1
 fi
 
-rm -fv /usr/local/sbin/arno-firewall
-rm -fv /usr/local/sbin/arno-fwfilter
-rm -fv /usr/local/sbin/traffic-accounting-show
+# A stopped firewall leaves a small ruleset behind (FORWARD policy DROP), remove it
+# so it can't block another firewall. A running ruleset is left until the next reboot
+if nft list table inet aif >/dev/null 2>&1 && ! nft list chain inet aif BASE_INPUT_CHAIN >/dev/null 2>&1; then
+  nft delete table inet aif && echo "Removed the ruleset left behind by the stopped firewall (nftables table inet aif)"
+fi
 
-rm -fv /usr/local/bin/arno-fwfilter
+rm -fv /usr/local/sbin/arno-firewall
+if readlink /usr/local/sbin/traffic-accounting-show |grep -q '/arno-firewall/'; then
+  rm -fv /usr/local/sbin/traffic-accounting-show
+fi
+
+# arno-fwfilter is shared with the iptables version, keep it while that one is installed
+if [ ! -f /usr/local/sbin/arno-iptables-firewall ]; then
+  rm -fv /usr/local/sbin/arno-fwfilter
+  rm -fv /usr/local/bin/arno-fwfilter
+  rm -fv /usr/local/share/man/man8/arno-fwfilter.1.gz
+else
+  echo "NOTE: The iptables version (arno-iptables-firewall) is still installed. If you want"
+  echo "      it to start at boot again: \"systemctl enable arno-iptables-firewall\" (or"
+  echo "      \"update-rc.d arno-iptables-firewall enable\")"
+fi
 
 rm -rfv /usr/local/share/arno-firewall
 
 rm -fv /usr/local/share/man/man8/arno-firewall.8.gz
-rm -fv /usr/local/share/man/man8/arno-fwfilter.1.gz
 
 rm -fv /usr/local/share/doc/arno-firewall/README
 
