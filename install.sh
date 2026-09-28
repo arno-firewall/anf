@@ -290,20 +290,6 @@ get_user_yn()
 }
 
 
-check_18_version()
-{
-  if grep -q "^MY_VERSION=" "/etc/init.d/arno-iptables-firewall" 2>/dev/null; then
-    if get_user_yn "WARNING: An old version is still installed. Removing it first is *STRONGLY* recommended. Remove" "y"; then
-      rm -fv /etc/init.d/arno-iptables-firewall
-      mv -fv /etc/arno-iptables-firewall/custom-rules /etc/arno-iptables-firewall/custom-rules.old
-      mv -fv /etc/arno-iptables-firewall/firewall.conf /etc/arno-iptables-firewall/firewall.conf.old
-      rm -fv /etc/arno-iptables-firewall/plugins/*.plugin
-      rm -fv /etc/rc*.d/*arno-iptables-firewall
-    fi
-  fi
-}
-
-
 check_dist_version()
 {
   if [ -f /usr/sbin/arno-iptables-firewall -o -f /usr/sbin/arno-firewall ]; then
@@ -349,7 +335,7 @@ migrate_iptables_version()
     return 0
   fi
 
-  echo "* Found an installation of the iptables version (arno-iptables-firewall)"
+  echo "* Found an installation of arno-iptables-firewall"
 
   # Take over its configuration, with its paths pointing to the new locations
   if [ $old_conf -eq 1 ]; then
@@ -375,7 +361,7 @@ migrate_iptables_version()
 
   # It stays installed (both versions can be used side by side), but shouldn't
   # start at boot as well
-  if [ $old_enabled -eq 1 ] && get_user_yn "Disable the service of the iptables version at boot (both would start at boot otherwise)" "y"; then
+  if [ $old_enabled -eq 1 ] && get_user_yn "Disable the service of the arno-iptables-firewall at boot (both would start at boot otherwise)" "y"; then
     if check_command systemctl; then
       systemctl disable arno-iptables-firewall 2>/dev/null
     fi
@@ -384,12 +370,12 @@ migrate_iptables_version()
     elif check_command chkconfig; then
       chkconfig arno-iptables-firewall off 2>/dev/null
     fi
-    echo "* Disabled the service of the iptables version at boot, re-enable it with eg."
+    echo "* Disabled the service of arno-iptables-firewall at boot, re-enable it with eg."
     echo "  \"systemctl enable arno-iptables-firewall\" (and disable arno-firewall)"
   fi
 
   # Optionally remove it completely (by default both versions stay installed)
-  if [ $old_prog -eq 1 ] && get_user_yn "Remove the program files of the iptables version (not needed, both versions can stay installed)" "n"; then
+  if [ $old_prog -eq 1 ] && get_user_yn "Remove the program files of the arno-iptables-firewall (not needed, both the iptables and nft versions can stay installed)" "n"; then
     if check_command systemctl; then
       systemctl disable arno-iptables-firewall 2>/dev/null
     fi
@@ -546,9 +532,6 @@ if ! get_user_yn "Continue install" "n"; then
   echo "*Install aborted"
   exit 1
 fi
-
-# Make sure an old version is not still installed
-check_18_version
 
 # Make sure a dist version is not already installed
 if ! check_dist_version; then
