@@ -265,10 +265,10 @@ load_modules()
   # nf_tables loads its expression modules on demand, only load the basics
   echo "Checking/probing nftables modules:"
   modprobe nf_tables
-  modprobe_multi nf_conntrack ip_conntrack
+  modprobe nf_conntrack
 
   if [ "$NAT" = "1" -o -n "$NAT_FORWARD_TCP" -o -n "$NAT_FORWARD_UDP" -o -n "$NAT_FORWARD_IP" ]; then
-    modprobe_multi nf_nat ip_nat
+    modprobe nf_nat
   fi
 
   echo " Module check done..."
@@ -306,8 +306,6 @@ setup_kernel_settings()
     sysctl -w net.netfilter.nf_conntrack_helper=0
   elif ! kernel_ver_chk 6 0 0; then
     echo " Conntrack legacy automatic helper assignment is ENABLED"
-    # Fallback to an older conntrack match method
-    NF_CONNTRACK_STATE="-m state --state"
   fi
 
   # Set the maximum number of connections to track.

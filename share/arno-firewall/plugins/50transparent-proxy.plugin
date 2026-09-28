@@ -38,7 +38,7 @@ PLUGIN_CONF_FILE="transparent-proxy.conf"
 plugin_start()
 {
   # Some required modules are already loaded by the main script:
-  modprobe_multi nf_nat ip_nat
+  modprobe nf_nat
 
   # Setup (transparent) proxy settings:
   #####################################

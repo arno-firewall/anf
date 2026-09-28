@@ -196,9 +196,6 @@ plugin_start_hfsc()
 {
   local retval=0
 
-  # Some required modules are already loaded by the main script:
-  modprobe_multi nf_nat ip_nat
-
   modprobe sch_hfsc
 
   printf "${INDENT}Shaping as (Down/Up) %d/%d kb/s using '%s' for interface(s): %s\n" $DOWNLINK $UPLINK hfsc "$SHAPER_IF"
@@ -269,9 +266,6 @@ plugin_start_hfsc()
 plugin_start_htb()
 {
   local retval=0
-
-  # Some required modules are already loaded by the main script:
-  modprobe_multi nf_nat ip_nat
 
   printf "${INDENT}Shaping as (Down/Up) %d/%d kb/s using '%s' for interface(s): %s\n" $DOWNLINK $UPLINK htb "$SHAPER_IF"
 

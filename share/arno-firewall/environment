@@ -209,9 +209,9 @@ load_conntrack_helper_module()
 {
   local helper="$1" proto="$2" dport="$3" l3proto="inet"
 
-  modprobe_multi nf_conntrack_$helper ip_conntrack_$helper
+  modprobe nf_conntrack_$helper
   if [ "$NAT" = "1" ]; then
-    modprobe_multi nf_nat_$helper ip_nat_$helper
+    modprobe nf_nat_$helper
   fi
 
   if [ "$helper" = "pptp" ]; then
@@ -1966,11 +1966,6 @@ ICMPV6_SPECIAL_TYPES="133 134 135 136"
 # IPv6 ICMPv6 Multicast Listener Discovery (RFC 2710, 3810)
 ######################################################################
 ICMPV6_MLD_TYPES="130 131 132 143"
-
-# Default conntrack match method, if needed the main script will
-# fallback to an older method after the conntrack modules are loaded.
-######################################################################
-NF_CONNTRACK_STATE="-m conntrack --ctstate"
 
 # Set system wide share path
 ############################

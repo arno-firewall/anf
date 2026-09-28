@@ -36,8 +36,6 @@ plugin_start()
 
   if [ "$NAT" = "1" ]; then
     echo "${INDENT}Enable PPTP NAT helper module"
-    modprobe_multi nf_nat_pptp ip_nat_pptp
-
     load_conntrack_helper_module pptp tcp 1723
   else
     echo "${INDENT}ERROR: NAT is not enabled, this plugin will be ignored."
