@@ -3,7 +3,7 @@
 MY_VERSION="1.06"
 
 # ------------------------------------------------------------------------------------------
-#                         -= Arno's Iptables Firewall(AIF) =-
+#                         -= Arno's (NFT) Firewall(AIF) =-
 #              Single- & multi-homed firewall script with DSL/ADSL support
 #
 #                           ~ In memory of my dear parents ~
@@ -30,15 +30,15 @@ MY_VERSION="1.06"
 
 # Check if the environment file exists and if so, load it
 #########################################################
-if [ -f ./share/arno-iptables-firewall/environment ]; then
-  . ./share/arno-iptables-firewall/environment
+if [ -f ./share/arno-firewall/environment ]; then
+  . ./share/arno-firewall/environment
 else
-  printf "\033[40m\033[1;31mERROR: Could not read environment file ./share/arno-iptables-firewall/environment!\033[0m\n\n" >&2
+  printf "\033[40m\033[1;31mERROR: Could not read environment file ./share/arno-firewall/environment!\033[0m\n\n" >&2
   exit 2
 fi
 
 # Allow user to override firewall.conf location (undocumented)
-FIREWALL_CONF=${1:-/etc/arno-iptables-firewall/firewall.conf}
+FIREWALL_CONF=${1:-/etc/arno-firewall/firewall.conf}
 
 
 sanity_check()
@@ -49,8 +49,8 @@ sanity_check()
     exit 1
   fi
 
-  if [ ! -f "/etc/arno-iptables-firewall/firewall.conf" ]; then
-    printf "\033[40m\033[1;31mERROR: It looks like arno-iptables-firewall is not installed on this system (yet)! Quitting...\033[0m\n\n" >&2
+  if [ ! -f "/etc/arno-firewall/firewall.conf" ]; then
+    printf "\033[40m\033[1;31mERROR: It looks like arno-firewall is not installed on this system (yet)! Quitting...\033[0m\n\n" >&2
     exit 1
   fi
 
@@ -236,9 +236,9 @@ setup_conf_file()
   fi
 
   # Make sure init script is executable and root owned
-  if [ -f /etc/init.d/arno-iptables-firewall ]; then
-    chown 0:0 /etc/init.d/arno-iptables-firewall
-    chmod 755 /etc/init.d/arno-iptables-firewall
+  if [ -f /etc/init.d/arno-firewall ]; then
+    chown 0:0 /etc/init.d/arno-firewall
+    chmod 755 /etc/init.d/arno-firewall
   fi
 
   # Set the correct permissions on the config file
@@ -248,15 +248,15 @@ setup_conf_file()
 
 
 # main line:
-AIF_VERSION="$(grep "MY_VERSION=" ./bin/arno-iptables-firewall |sed -e "s/^MY_VERSION=\"//" -e "s/\"$//")"
+AIF_VERSION="$(grep "MY_VERSION=" ./bin/arno-firewall |sed -e "s/^MY_VERSION=\"//" -e "s/\"$//")"
 
-printf "\033[40m\033[1;32mArno's Iptables Firewall(AIF) v$AIF_VERSION\033[0m\n"
+printf "\033[40m\033[1;32mArno's (NFT) Firewall(AIF) v$AIF_VERSION\033[0m\n"
 printf "Configure Script v$MY_VERSION\n"
 echo "-------------------------------------------------------------------------------"
 
 sanity_check
 
-if diff ./etc/arno-iptables-firewall/firewall.conf "$FIREWALL_CONF" >/dev/null; then
+if diff ./etc/arno-firewall/firewall.conf "$FIREWALL_CONF" >/dev/null; then
   if get_user_yn "Your firewall.conf is not configured yet.\nDo you want me to help you setup a basic configuration" "y"; then
     setup_conf_file
   else

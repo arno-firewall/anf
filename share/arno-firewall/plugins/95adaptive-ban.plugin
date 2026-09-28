@@ -1,0 +1,206 @@
+# ------------------------------------------------------------------------------
+#            -= Arno's (NFT) Firewall(AIF) - Adaptive Ban plugin =-
+#
+PLUGIN_NAME="Adaptive Ban plugin"
+PLUGIN_VERSION="1.04 BETA"
+PLUGIN_CONF_FILE="adaptive-ban.conf"
+#
+# Last changed          : February 3, 2019
+# Requirements          : AIF 2.1.0 (or newer)
+# Comments              : Parse a log file for failed access with offending IP addresses
+#                         Ban the IP address after multiple failed attempts
+#
+# Author                : (C) Copyright 2010-2019 by Arno van Amersfoort & Lonnie Abelbeck
+# Credits               : AstLinux Project
+# Homepage              : https://www.astlinux-project.org/
+# Credits               : Fail2ban Project
+# Homepage              : https://www.fail2ban.org/
+# Credits               : Arno van Amersfoort
+# Web                   : https://github.com/arno-iptables-firewall/aif
+# Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
+#                         (note: you must remove all spaces and substitute the @ and the .
+#                         at the proper locations!)
+# ------------------------------------------------------------------------------
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# version 2 as published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+# ------------------------------------------------------------------------------
+
+# (Background) job name
+JOB_NAME="adaptive-ban"
+
+# (Background) job helper script
+JOB_HELPER_SCRIPT="$PLUGIN_BIN_PATH/adaptive-ban-helper"
+
+# Plugin start function
+plugin_start()
+{
+  local host net IFS
+
+  nft_chain ADAPTIVE_BAN_DROP_CHAIN
+  nft_rule ADAPTIVE_BAN_DROP_CHAIN "limit rate 1/hour burst 1 packets log prefix \"AIF:Adaptive-Ban host: \" level $LOGLEVEL"
+  if [ "$ADAPTIVE_BAN_REJECT" = "1" ]; then
+    nft_rule ADAPTIVE_BAN_DROP_CHAIN "reject with icmpx type host-unreachable"
+  else
+    nft_rule ADAPTIVE_BAN_DROP_CHAIN "drop"
+  fi
+
+  nft_chain ADAPTIVE_BAN_CHAIN
+  if [ "$ADAPTIVE_BAN_WHITELIST_INTERNAL" != "0" ]; then
+    printf "${INDENT}Adaptive Ban - Whitelisting INTERNAL net(s): "
+    IFS=' ,'
+    for net in $INTERNAL_NET; do
+      printf "$net "
+      nft_rule ADAPTIVE_BAN_CHAIN "$(nft_addr saddr $net) return"
+    done
+    echo ""
+  fi
+  if [ -n "$ADAPTIVE_BAN_WHITELIST" ]; then
+    printf "${INDENT}Adaptive Ban - Whitelisting host(s): "
+    IFS=' ,'
+    for host in $ADAPTIVE_BAN_WHITELIST; do
+      printf "$host "
+      nft_rule ADAPTIVE_BAN_CHAIN "$(nft_addr saddr $host) return"
+    done
+    echo ""
+  fi
+
+  # Banned hosts are added to these sets by the helper
+  nft_cmd "add set inet $NFT_TABLE aif_adaptive_ban { type ipv4_addr; }"
+  nft_rule ADAPTIVE_BAN_CHAIN "ip saddr @aif_adaptive_ban jump ADAPTIVE_BAN_DROP_CHAIN"
+  if [ "$IPV6_SUPPORT" = "1" ]; then
+    nft_cmd "add set inet $NFT_TABLE aif_adaptive_banv6 { type ipv6_addr; }"
+    nft_rule ADAPTIVE_BAN_CHAIN "ip6 saddr @aif_adaptive_banv6 jump ADAPTIVE_BAN_DROP_CHAIN"
+  fi
+
+  # Insert rule in the INPUT chain
+  nft_insert INPUT "jump ADAPTIVE_BAN_CHAIN"
+
+  # Insert rule in the FORWARD chain
+  nft_insert FORWARD "jump ADAPTIVE_BAN_CHAIN"
+
+  echo "${INDENT}File=$ADAPTIVE_BAN_FILE Time=$ADAPTIVE_BAN_TIME Count=$ADAPTIVE_BAN_COUNT Types=$ADAPTIVE_BAN_TYPES"
+
+  # Create background job
+  if ! job_add "$JOB_NAME" "${ADAPTIVE_BAN_TIME:-2}" "$JOB_HELPER_SCRIPT"; then
+    return 1
+  fi
+
+  return 0
+}
+
+
+# Plugin stop function
+plugin_stop()
+{
+  printf "${INDENT}Adaptive Ban - Stopping... "
+
+  return 0
+}
+
+
+# Plugin status function
+plugin_status()
+{
+  echo "  Banned Hosts:"
+  echo "  =============================="
+  $NFT list set inet $NFT_TABLE aif_adaptive_ban 2>/dev/null |tr -d '\n' |sed -n -e 's/^.*elements = { *\([^}]*\)}.*$/\1/p' |tr ',' '\n' |awk '{ gsub(/^[ \t]+|[ \t]+$/, ""); if ($0 != "") print "  " $0 }'
+  if [ "$IPV6_SUPPORT" = "1" ]; then
+    $NFT list set inet $NFT_TABLE aif_adaptive_banv6 2>/dev/null |tr -d '\n' |sed -n -e 's/^.*elements = { *\([^}]*\)}.*$/\1/p' |tr ',' '\n' |awk '{ gsub(/^[ \t]+|[ \t]+$/, ""); if ($0 != "") print "  " $0 }'
+  fi
+  echo "  ------------------------------"
+  echo ""
+
+  echo "  Whitelisted Hosts:"
+  echo "  =============================="
+  $NFT list chain inet $NFT_TABLE ADAPTIVE_BAN_CHAIN | sed -n -e 's/^.* saddr \([^ ]*\) return$/  \1/p'
+  echo "  ------------------------------"
+  echo ""
+
+  return 0
+}
+
+
+# Check sanity of eg. environment
+plugin_sanity_check()
+{
+  if [ -z "$ADAPTIVE_BAN_FILE" -o -z "$ADAPTIVE_BAN_TIME" -o -z "$ADAPTIVE_BAN_COUNT" -o -z "$ADAPTIVE_BAN_TYPES" ]; then
+    printf "\033[40m\033[1;31m${INDENT}ERROR: The plugin config file is not properly set!\033[0m\n" >&2
+    return 1
+  fi
+
+  if [ ! -f "$JOB_HELPER_SCRIPT" ]; then
+    printf "\033[40m\033[1;31m${INDENT}ERROR: The job helper script($JOB_HELPER_SCRIPT) can not be found!\033[0m\n" >&2
+    return 1
+  fi
+
+  if [ "$PLUGIN_CMD" = "start" ] && [ ! -f "$ADAPTIVE_BAN_FILE" ]; then
+    printf "\033[40m\033[1;31m${INDENT}ERROR: Input log file $ADAPTIVE_BAN_FILE does not exist!\033[0m\n" >&2
+    return 1
+  fi
+
+  if ! check_command sort; then
+    printf "\033[40m\033[1;31m${INDENT}ERROR: Required command sort is not available!\033[0m\n" >&2
+    return 1
+  fi
+
+  if ! check_command uniq; then
+    printf "\033[40m\033[1;31m${INDENT}ERROR: Required command uniq is not available!\033[0m\n" >&2
+    return 1
+  fi
+
+  return 0
+}
+
+
+############
+# Mainline #
+############
+
+# Check where to find the config file
+CONF_FILE=""
+if [ -n "$PLUGIN_CONF_PATH" ]; then
+  CONF_FILE="$PLUGIN_CONF_PATH/$PLUGIN_CONF_FILE"
+fi
+
+# Preinit to success:
+PLUGIN_RET_VAL=0
+
+# Check if the config file exists
+if [ ! -f "$CONF_FILE" ]; then
+  printf "NOTE: Config file \"$CONF_FILE\" not found!\n        Plugin \"$PLUGIN_NAME v$PLUGIN_VERSION\" ignored!\n" >&2
+else
+  # Source the plugin config file
+  . "$CONF_FILE"
+
+  if [ "$ENABLED" = "1" ] ||
+     [ -n "$PLUGIN_LOAD_FILE" -a "$PLUGIN_CMD" = "stop" ] ||
+     [ -n "$PLUGIN_LOAD_FILE" -a "$PLUGIN_CMD" = "status" ]; then
+    # Show who we are:
+    echo "${INDENT}$PLUGIN_NAME v$PLUGIN_VERSION"
+
+    # Increment indention
+    INDENT="$INDENT "
+
+    # Only proceed if environment ok
+    if ! plugin_sanity_check; then
+      PLUGIN_RET_VAL=1
+    else
+      case $PLUGIN_CMD in
+        start|'') plugin_start; PLUGIN_RET_VAL=$?;;
+        stop    ) plugin_stop; PLUGIN_RET_VAL=$?;;
+        status  ) plugin_status; PLUGIN_RET_VAL=$?;;
+        *       ) PLUGIN_RET_VAL=1; printf "\033[40m\033[1;31m${INDENT}ERROR: Invalid plugin option \"$PLUGIN_CMD\"!\033[0m\n" >&2;;
+      esac
+    fi
+  fi
+fi

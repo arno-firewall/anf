@@ -3,7 +3,7 @@
 MY_VERSION="1.0f"
 
 # ------------------------------------------------------------------------------------------
-#                         -= Arno's Iptables Firewall(AIF) =-
+#                         -= Arno's (NFT) Firewall(AIF) =-
 #              Single- & multi-homed firewall script with DSL/ADSL support
 #
 #                           ~ In memory of my dear parents ~
@@ -83,9 +83,9 @@ get_user_yn()
 
 
 # main line:
-AIF_VERSION="$(grep "MY_VERSION=" ./bin/arno-iptables-firewall |sed -e "s/^MY_VERSION=\"//" -e "s/\"$//")"
+AIF_VERSION="$(grep "MY_VERSION=" ./bin/arno-firewall |sed -e "s/^MY_VERSION=\"//" -e "s/\"$//")"
 
-printf "\033[40m\033[1;32mArno's Iptables Firewall(AIF) v$AIF_VERSION\033[0m\n"
+printf "\033[40m\033[1;32mArno's (NFT) Firewall(AIF) v$AIF_VERSION\033[0m\n"
 printf "Uninstall Script v$MY_VERSION\n"
 echo "-------------------------------------------------------------------------------"
 
@@ -96,45 +96,45 @@ if ! get_user_yn "Continue uninstall" "n"; then
   exit 1
 fi
 
-rm -fv /usr/local/sbin/arno-iptables-firewall
+rm -fv /usr/local/sbin/arno-firewall
 rm -fv /usr/local/sbin/arno-fwfilter
 rm -fv /usr/local/sbin/traffic-accounting-show
 
 rm -fv /usr/local/bin/arno-fwfilter
 
-rm -rfv /usr/local/share/arno-iptables-firewall
+rm -rfv /usr/local/share/arno-firewall
 
-rm -fv /usr/local/share/man/man8/arno-iptables-firewall.8.gz
+rm -fv /usr/local/share/man/man8/arno-firewall.8.gz
 rm -fv /usr/local/share/man/man8/arno-fwfilter.1.gz
 
-rm -fv /usr/local/share/doc/arno-iptables-firewall/README
+rm -fv /usr/local/share/doc/arno-firewall/README
 
-rm -fv /etc/logrotate.d/arno-iptables-firewall
+rm -fv /etc/logrotate.d/arno-firewall
 
 # Disable systemd
 if check_command systemctl; then
-  systemctl disable arno-iptables-firewall
+  systemctl disable arno-firewall
 fi
 
 # Disable via update-rc.d/chkconfig
 if check_command update-rc.d; then
-  update-rc.d -f arno-iptables-firewall remove
+  update-rc.d -f arno-firewall remove
 elif check_command chkconfig; then
-  chkconfig --del arno-iptables-firewall
+  chkconfig --del arno-firewall
 fi
 
 # Remove init.d script
-rm -fv /etc/init.d/arno-iptables-firewall
-rm -fv /etc/rc.d/rc*.d/*arno-iptables-firewall
-rm -fv /etc/rc*.d/*arno-iptables-firewall
+rm -fv /etc/init.d/arno-firewall
+rm -fv /etc/rc.d/rc*.d/*arno-firewall
+rm -fv /etc/rc*.d/*arno-firewall
 
 # Remove systemd files
-rm -fv /usr/lib/systemd/system/arno-iptables-firewall.service
-rm -fv /lib/systemd/system/arno-iptables-firewall.service
-rm -fv /etc/systemd/arno-iptables-firewall.service
+rm -fv /usr/lib/systemd/system/arno-firewall.service
+rm -fv /lib/systemd/system/arno-firewall.service
+rm -fv /etc/systemd/arno-firewall.service
 
-if get_user_yn "Also remove ALL configuration files from /etc/arno-iptables-firewall/" "n"; then
-  rm -rfv /etc/arno-iptables-firewall
+if get_user_yn "Also remove ALL configuration files from /etc/arno-firewall/" "n"; then
+  rm -rfv /etc/arno-firewall
 else
   echo "* Skipped"
 fi

@@ -1,4 +1,4 @@
-                    -= Arno's Iptables Firewall(AIF) =-
+                    -= Arno's (NFT) Firewall(AIF) =-
          Single- & multi-homed firewall script with DSL/ADSL support
 
                       ~ In memory of my dear parents ~
@@ -46,8 +46,8 @@ troubleshooting section below!
 
 An explanation of the files in the package:
 -------------------------------------------
-/bin/arno-iptables-firewall :
-        The actual firewall script, core of Arno's Iptables Firewall(AIF).
+/bin/arno-firewall :
+        The actual firewall script, core of Arno's (NFT) Firewall(AIF).
         You should put this file in eg. /usr/local/sbin/ . You should make
         sure it's executable (use "chmod 700 or chmod +x).
 
@@ -61,47 +61,47 @@ An explanation of the files in the package:
         options for fwfilter can be configured within the script itself. You 
         should put this file in eg. /usr/local/bin/.
 
-/etc/arno-iptables-firewall/firewall.conf :
-        The configuration file used for Arno's Iptables Firewall(AIF).
-        Normally you should put it in /etc/arno-iptables-firewall/. Make sure
+/etc/arno-firewall/firewall.conf :
+        The configuration file used for Arno's (NFT) Firewall(AIF).
+        Normally you should put it in /etc/arno-firewall/. Make sure
         root is owner/group (with "chown 0:0").
 
-/etc/arno-iptables-firewall/plugins/ :
+/etc/arno-firewall/plugins/ :
         Any plugin config files  (.conf files) are stored here.
 
-/etc/arno-iptables-firewall/conf.d/ :
+/etc/arno-firewall/conf.d/ :
         Put any (override) configuration files in the directory. Any files here
         with a .conf-extension(!) will be sourced AFTER the main firewall.conf
         file has been read.
 
-/etc/arno-iptables-firewall/custom-rules :
+/etc/arno-firewall/custom-rules :
         Put any (iptables) custom rules in this file. This file
-        should be put in /etc/arno-iptables-firewall/ . Make sure root
+        should be put in /etc/arno-firewall/ . Make sure root
         is owner/group (with "chown 0:0").
 
-/lib/systemd/system/arno-iptables-firewall.service :
+/lib/systemd/system/arno-firewall.service :
         The systemd service file. Depending on your system it should be
         put in either /usr/lib/systemd/system, /lib/systemd/system or
         /etc/systemd/system
 
-/etc/init.d/arno-iptables-firewall :
+/etc/init.d/arno-firewall :
         The init.d script (for older systems still using init.d). On some (older)
         distributions you may need to put it in /etc/rc.d/ (instead of
         /etc/init.d).  You should make sure it's executable (use "chmod 700 or
         chmod +x). Inside this script you can also enable VERBOSE(=1) logging
         for eg. debugging purposes.
 
-/share/arno-iptables-firewall/environment :
+/share/arno-firewall/environment :
         This is the environment-file required by the firewall and plugins.
         It contains several global functions. It should normally be put in
         /usr/local/share/.
 
-/share/arno-iptables-firewall/plugins/ :
+/share/arno-firewall/plugins/ :
         Put any plugin binaries (.plugin files) for my firewall in this
         directory. It should normally be put in /usr/local/share/.
 
-/share/man/man8/arno-iptables-firewall.8 :
-        A man page for the arno-iptables-firewall script.
+/share/man/man8/arno-firewall.8 :
+        A man page for the arno-firewall script.
 
 /share/man/man1/arno-fwfilter.1 :
         A man page for the arno-fwfilter script.
@@ -167,7 +167,7 @@ An explanation of the files in the package:
                 Also see 5)
 
    You may want to have a look at the configuration file in
-   /etc/arno-iptables-firewall/ for additional information (and examples)
+   /etc/arno-firewall/ for additional information (and examples)
 
 5) For configuration-variables/rules which are related to the external
    (internet) interface one can restrict the interface(s) for which it is
@@ -262,7 +262,7 @@ features are enabled by default to protect you from hostile attacks.
       need this).
 
       We must enable/configure the dsl-ppp-modem plugin via
-      /etc/arno-iptables-firewall/dsl-ppp-modem.conf by setting ENABLED=1.
+      /etc/arno-firewall/dsl-ppp-modem.conf by setting ENABLED=1.
       Now we must configure the network interface(ethX) to which your modem is
       physically connected (=MODEM_IF, which is commented(#) out by default),
       and this is NOT ppp+, ppp0 etc.! Here are some examples on how to do it
@@ -315,7 +315,7 @@ features are enabled by default to protect you from hostile attacks.
          to the OPEN_TCP-variable. (Not recommended)
 
 9)  You're now ready to start the firewall by issueing:
-    "/etc/init.d/arno-iptables-firewall start"
+    "/etc/init.d/arno-firewall start"
     Everything should be working OK now, if it doesn't, carefully review all
     steps and your configuration. For troubleshouting you can first consult 
     the FAQs on my webpage.
@@ -344,7 +344,7 @@ Troubleshooting: What if it doesn't work?:
 2)  Obtain the latest version of your (distribution) kernel & iptables.
 3)  Make sure your (self-built) kernel supports all required options.
 4)  Carefully inspect the output generated when issueing
-    "arno-iptables-firewall start"
+    "arno-firewall start"
 5)  Read the README file at least 3 times
 6)  Download the latest (beta) version of my script and check whether this
     fixes your problem.
@@ -353,7 +353,7 @@ Troubleshooting: What if it doesn't work?:
 8)  Do NOT send enduser requests to my personal email address, instead post
     your question/problem on the firewall mailing list. Provide us with:
     - your (firewall) *.conf files
-    - the screen output of "/usr/local/sbin/arno-iptables-firewall start" 
+    - the screen output of "/usr/local/sbin/arno-firewall start" 
       (or whatever it is located)
     - the output of 'ifconfig'
     - (firewall) logs
@@ -372,7 +372,7 @@ that implement specific functionality.
 
 Notes on plugins:
 -----------------
-1) Plugin config files can be found in /etc/arno-iptables-firewall/plugins/
+1) Plugin config files can be found in /etc/arno-firewall/plugins/
 2) All plugins have an option called "ENABLED" (in their config file) which is
    set to 0 by default, meaning it is disabled. So if you actually want to use
    a plugin, you have to make ENABLED=1
@@ -421,7 +421,7 @@ Notes on writing your own plugins
     it's absolutely necessary!
 
 
-Available iptables chains created by Arno's Iptables Firewall
+Available iptables chains created by Arno's (NFT) Firewall
 -------------------------------------------------------------
 BASE_INPUT_CHAIN            - Base input chain. For internal use by AIF only!
 BASE_OUTPUT_CHAIN           - Base output chain. For internal use by AIF only!

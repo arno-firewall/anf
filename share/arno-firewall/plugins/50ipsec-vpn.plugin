@@ -1,0 +1,180 @@
+# ------------------------------------------------------------------------------
+#             -= Arno's (NFT) Firewall(AIF) - IPsec VPN plugin =-
+#
+PLUGIN_NAME="IPsec VPN plugin"
+PLUGIN_VERSION="0.85"
+PLUGIN_CONF_FILE="ipsec-vpn.conf"
+#
+# Last changed          : July 12, 2016
+# Requirements          : AIF 2.0.0+ and kernel 2.6 + ipt_policy + iptable_nat
+# Comments              : This plugin adds all required rules for using Racoon IPSEC.
+#
+# Author                : (C) Copyright 2006-2016 by Philip Prindeville & Arno van Amersfoort
+# Web                   : https://github.com/arno-iptables-firewall/aif
+# Email                 : philipp AT redfish-solutions DOT com
+#                         (note: you must remove all spaces and substitute the @ and the .
+#                         at the proper locations!)
+# ------------------------------------------------------------------------------
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# version 2 as published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+# ------------------------------------------------------------------------------
+
+# Plugin start function
+plugin_start()
+{
+  local eif net ipver IFS
+
+
+  nft_chain VPN_INPUT
+
+  nft_chain VPN_FORWARD
+
+  # If the user has specified a subset of remote networks, only allow those.
+  if [ -n "$IPSEC_VPN_NETS" ]; then
+    echo "${INDENT}Applying rules for VPN nets $IPSEC_VPN_NETS"
+    IFS=' ,'
+    for vnet in $IPSEC_VPN_NETS; do
+      nft_rule VPN_INPUT "$(nft_addr saddr $vnet) accept"
+      nft_rule VPN_FORWARD "$(nft_addr saddr $vnet) accept"
+    done
+    nft_rule VPN_INPUT "drop"
+    nft_rule VPN_FORWARD "drop"
+  else
+    # Otherwise, we allow everything.
+    nft_rule VPN_INPUT "accept"
+    nft_rule VPN_FORWARD "accept"
+  fi
+
+  # Don't apply the usual filters for the external interface on
+  # traffic that's just been decapulated.  We treat it mostly like
+  # internal traffic.
+  # iptables -A EXT_INPUT_CHAIN -m policy --pol ipsec --dir in -j VPN_INPUT
+  # (unnecessary since the -A INPUT...-j VPN_INPUT rule below supersedes this rule)
+
+  echo "${INDENT}Allowing internet hosts $IPSEC_ALLOWED_HOSTS to access the VPN service"
+  IFS=' ,'
+  for host in `nft_hosts "$IPSEC_ALLOWED_HOSTS"`; do
+    nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport 500 accept"
+    get_numeric_ip_version "$host"
+    ipver=$?
+    if [ $ipver -eq 4 -o $ipver -eq 0 ]; then
+      nft_rule EXT_INPUT_CHAIN "meta nfproto ipv4 $(nft_addr saddr $host) meta l4proto esp accept"
+      nft_rule EXT_INPUT_CHAIN "meta nfproto ipv4 $(nft_addr saddr $host) meta l4proto ah accept"
+    fi
+    if [ "$IPV6_SUPPORT" = "1" ]; then
+      if [ $ipver -eq 6 -o $ipver -eq 0 ]; then
+        nft_rule EXT_INPUT_CHAIN "meta nfproto ipv6 $(nft_addr saddr $host) meta l4proto esp accept"
+        nft_rule EXT_INPUT_CHAIN "meta nfproto ipv6 $(nft_addr saddr $host) meta l4proto ah accept"
+      fi
+    fi
+
+    if [ "$IPSEC_NAT_TRAVERSAL" = "1" ]; then
+      nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) udp dport 4500 accept"
+    fi
+  done
+
+  IFS=' ,'
+  for eif in $EXT_IF; do
+    for net in $INTERNAL_NET; do
+      nft_insert SPOOF_CHK "$(nft_if iifname $eif) $(nft_addr saddr $net) meta ipsec exists return"
+    done
+  done
+
+  IFS=' ,'
+  for eif in ${NAT_IF:-$EXT_IF}; do
+    # Allow IPSEC packets in after decapsulation
+    nft_rule PREROUTING "meta nfproto ipv4 $(nft_if iifname $eif) meta ipsec exists accept"
+
+    # Do not apply masquerading to outbound traffic
+    nft_rule POSTROUTING "meta nfproto ipv4 $(nft_if oifname $eif) rt ipsec exists accept"
+  done
+
+  IFS=' ,'
+  for eif in $EXT_IF; do
+    nft_rule FORWARD "$(nft_if iifname $eif) meta ipsec exists jump VPN_FORWARD"
+    nft_rule INPUT "$(nft_if iifname $eif) meta ipsec exists jump VPN_INPUT"
+  done
+
+  return 0
+}
+
+
+# Plugin stop function
+plugin_stop()
+{
+  return 0
+}
+
+
+# Plugin status function
+plugin_status()
+{
+  return 0
+}
+
+
+# Check sanity of eg. environment
+plugin_sanity_check()
+{
+  # Sanity check
+  if [ -z "$IPSEC_ALLOWED_HOSTS" ]; then
+    printf "\033[40m\033[1;31m${INDENT}ERROR: The plugin config file is not properly set!\033[0m\n" >&2
+    return 1
+  fi
+
+  return 0
+}
+
+
+############
+# Mainline #
+############
+
+# Check where to find the config file
+CONF_FILE=""
+if [ -n "$PLUGIN_CONF_PATH" ]; then
+  CONF_FILE="$PLUGIN_CONF_PATH/$PLUGIN_CONF_FILE"
+fi
+
+# Preinit to success:
+PLUGIN_RET_VAL=0
+
+# Check if the config file exists
+if [ ! -f "$CONF_FILE" ]; then
+  printf "NOTE: Config file \"$CONF_FILE\" not found!\n        Plugin \"$PLUGIN_NAME v$PLUGIN_VERSION\" ignored!\n" >&2
+else
+  # Source the plugin config file
+  . "$CONF_FILE"
+
+  if [ "$ENABLED" = "1" ] ||
+     [ -n "$PLUGIN_LOAD_FILE" -a "$PLUGIN_CMD" = "stop" ] ||
+     [ -n "$PLUGIN_LOAD_FILE" -a "$PLUGIN_CMD" = "status" ]; then
+    # Show who we are:
+    echo "${INDENT}$PLUGIN_NAME v$PLUGIN_VERSION"
+
+    # Increment indention
+    INDENT="$INDENT "
+
+    # Only proceed if environment ok
+    if ! plugin_sanity_check; then
+      PLUGIN_RET_VAL=1
+    else
+      case $PLUGIN_CMD in
+        start|'') plugin_start; PLUGIN_RET_VAL=$? ;;
+        stop    ) plugin_stop; PLUGIN_RET_VAL=$? ;;
+        status  ) plugin_status; PLUGIN_RET_VAL=$? ;;
+        *       ) PLUGIN_RET_VAL=1; printf "\033[40m\033[1;31m  ERROR: Invalid plugin option \"$PLUGIN_CMD\"!\033[0m\n" >&2 ;;
+      esac
+    fi
+  fi
+fi

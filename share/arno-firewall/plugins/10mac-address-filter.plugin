@@ -1,0 +1,197 @@
+# ------------------------------------------------------------------------------
+#        -= Arno's (NFT) Firewall(AIF) - MAC Address Filter plugin =-
+#
+PLUGIN_NAME="MAC Address Filter plugin"
+PLUGIN_VERSION="1.1b"
+PLUGIN_CONF_FILE="mac-address-filter.conf"
+#
+# Last changed          : July 21, 2015
+# Requirements          : ipt_mac module
+# Comments              : This plugin allows you to select the MAC addresses
+#                         that are allowed access for the specified interfaces
+#                         (eg. INT_IF)
+#
+# Author                : (C) Copyright 2010-2015 by Arno van Amersfoort
+# Web                   : https://github.com/arno-iptables-firewall/aif
+# Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
+#                         (note: you must remove all spaces and substitute the @ and the .
+#                         at the proper locations!)
+# ------------------------------------------------------------------------------
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# version 2 as published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+# ------------------------------------------------------------------------------
+
+# Plugin start function
+plugin_start()
+{
+  # Probe module ipt_recent (Allows checking for recent packets):
+
+  # Create new chains
+  nft_chain MAC_FILTER_HOOK
+  nft_chain MAC_FILTER
+
+  echo " Using interface(s): $MAC_ADDRESS_IF"
+
+  # Here we filter the internal hosts using their MAC address (if used)
+  #####################################################################
+
+  # Setup the mac addresses from our file
+  printf "${INDENT}(Re)loading allowed internal MAC addresses from $MAC_ADDRESS_FILE: "
+
+  # Allow IPv4 broadcasts and IPv6 "link-scope all-hosts multicast"
+  nft_rule MAC_FILTER "ip daddr 255.255.255.255 return"
+  if [ "$IPV6_SUPPORT" = "1" ]; then
+    nft_rule MAC_FILTER "ip6 daddr ff02::1 return"
+  fi
+
+  #iptables -A MAC_FILTER -m pkttype --pkt-type ! unicast -j RETURN
+  #iptables -A MAC_FILTER -m addrtype --dst-type BROADCAST -j RETURN
+  if [ -n "$INT_NET_BCAST_ADDRESS" ]; then
+    IFS=' ,'
+    for address in $INT_NET_BCAST_ADDRESS; do
+      nft_rule MAC_FILTER "$(nft_addr daddr $address) return"
+    done
+  else
+    IFS=' ,'
+    for net in $INTERNAL_NET; do
+      get_numeric_ip_version "$net"
+      case $? in
+      4)
+        # Class C net
+        nft_rule MAC_FILTER "ip daddr $(echo "$net" |awk -F. '{ print $1"."$2"."$3".255" }') return"
+
+        # Class B net
+        nft_rule MAC_FILTER "ip daddr $(echo "$net" |awk -F. '{ print $1"."$2".255.255" }') return"
+
+        # Class A net
+        nft_rule MAC_FILTER "ip daddr $(echo "$net" |awk -F. '{ print $1".255.255.255" }') return"
+        ;;
+      esac
+    done
+  fi
+
+  MCOUNT=0
+
+IFS='
+'
+  for LINE in `cat "$MAC_ADDRESS_FILE" |sed -e 's|#.*||' -e 's| *$||'`; do
+    if [ -n "$LINE" ]; then
+      src_mac="$(echo "$LINE" |awk '{ print $1 }')"
+      src_ip="$(echo "$LINE" |awk '{ print $2 }')"
+
+      if [ -z "$src_ip" ]; then
+        src_ip="0/0"
+      fi
+
+      MCOUNT=$((MCOUNT + 1))
+      nft_rule MAC_FILTER "ether saddr $src_mac $(nft_addr saddr $src_ip) return"
+    fi
+  done
+
+  if [ "$MAC_ADDRESS_LOG" = "1" ]; then
+    nft_rule MAC_FILTER "limit rate 3/minute burst 5 packets log prefix \"AIF:MAC address dropped: \" level $LOGLEVEL"
+  fi
+
+
+  # Anyone else is dropped
+  nft_rule MAC_FILTER "jump POST_INPUT_DROP_CHAIN"
+
+  IFS=' ,'
+  for interface in $MAC_ADDRESS_IF; do
+    nft_rule MAC_FILTER_HOOK "$(nft_if iifname $interface) jump MAC_FILTER"
+  done
+
+  # Insert chains
+  nft_rule INPUT "jump MAC_FILTER_HOOK"
+  nft_rule FORWARD "jump MAC_FILTER_HOOK"
+
+  echo "$MCOUNT loaded"
+
+  return 0
+}
+
+
+# Plugin stop function
+plugin_stop()
+{
+  return 0
+}
+
+
+# Plugin status function
+plugin_status()
+{
+#  iptables -xnvL MAC_FILTER |sed -e "s/^/$INDENT/"
+  return 0
+}
+
+
+# Check sanity of eg. environment
+plugin_sanity_check()
+{
+  if [ ! -f "$MAC_ADDRESS_FILE" ]; then
+    printf "\033[40m\033[1;31m${INDENT}NOTE: Cannot read the allowed internal MAC address file \"$MAC_ADDRESS_FILE\".\033[0m\n" >&2
+    return 1
+  fi
+
+  if [ -z "$MAC_ADDRESS_IF" ]; then
+    printf "\033[40m\033[1;31m${INDENT}ERROR: The plugin config file is not properly set!\033[0m\n" >&2
+    return 1
+  fi
+
+  return 0
+}
+
+
+############
+# Mainline #
+############
+
+# Check where to find the config file
+CONF_FILE=""
+if [ -n "$PLUGIN_CONF_PATH" ]; then
+  CONF_FILE="$PLUGIN_CONF_PATH/$PLUGIN_CONF_FILE"
+fi
+
+# Preinit to success:
+PLUGIN_RET_VAL=0
+
+# Check if the config file exists
+if [ ! -f "$CONF_FILE" ]; then
+  printf "NOTE: Config file \"$CONF_FILE\" not found!\n        Plugin \"$PLUGIN_NAME v$PLUGIN_VERSION\" ignored!\n" >&2
+else
+  # Source the plugin config file
+  . "$CONF_FILE"
+
+  if [ "$ENABLED" = "1" ] ||
+     [ -n "$PLUGIN_LOAD_FILE" -a "$PLUGIN_CMD" = "stop" ] ||
+     [ -n "$PLUGIN_LOAD_FILE" -a "$PLUGIN_CMD" = "status" ]; then
+    # Show who we are:
+    echo "${INDENT}$PLUGIN_NAME v$PLUGIN_VERSION"
+
+    # Increment indention
+    INDENT="$INDENT "
+
+    # Only proceed if environment ok
+    if ! plugin_sanity_check; then
+      PLUGIN_RET_VAL=1
+    else
+      case $PLUGIN_CMD in
+        start|'') plugin_start; PLUGIN_RET_VAL=$? ;;
+        stop    ) plugin_stop; PLUGIN_RET_VAL=$? ;;
+        status  ) plugin_status; PLUGIN_RET_VAL=$? ;;
+        *       ) PLUGIN_RET_VAL=1; printf "\033[40m\033[1;31m${INDENT}ERROR: Invalid plugin option \"$PLUGIN_CMD\"!\033[0m\n" >&2 ;;
+      esac
+    fi
+  fi
+fi

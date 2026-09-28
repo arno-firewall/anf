@@ -1,0 +1,24 @@
+[Unit]
+Description=Arno's (NFT) Firewall(AIF)
+Documentation=man:arno-firewall(8)
+Documentation=https://github.com/arno-iptables-firewall/aif
+DefaultDependencies=no
+After=local-fs.target network-online.target
+Requires=local-fs.target network-online.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/arno-firewall start
+ExecStop=/usr/local/sbin/arno-firewall stop
+ExecReload=/usr/local/sbin/arno-firewall force-reload
+RemainAfterExit=yes
+ProtectSystem=true
+ProtectHome=true
+PrivateTmp=false
+LimitNPROC=1
+DeviceAllow=/dev/null rw
+
+[Install]
+WantedBy=multi-user.target

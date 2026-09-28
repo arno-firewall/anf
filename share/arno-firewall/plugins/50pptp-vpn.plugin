@@ -1,0 +1,204 @@
+# ------------------------------------------------------------------------------
+#             -= Arno's (NFT) Firewall(AIF) - PPTP VPN plugin =-
+#
+PLUGIN_NAME="PPTP VPN plugin"
+PLUGIN_VERSION="1.00 BETA"
+PLUGIN_CONF_FILE="pptp-vpn.conf"
+#
+# Last changed          : February 21, 2011
+# Requirements          : AIF 2.0.0+
+# Comments              : This plugin adds all required rules for using a PPTP Server.
+#
+# Author                : (C) Copyright 2011 by Lonnie Abelbeck & Arno van Amersfoort
+# Web                   : https://github.com/arno-iptables-firewall/aif
+# Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
+#                         (note: you must remove all spaces and substitute the @ and the .
+#                         at the proper locations!)
+# ------------------------------------------------------------------------------
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# version 2 as published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+# ------------------------------------------------------------------------------
+
+# Plugin start function
+plugin_start()
+{
+  local host net eif ppp_ifs="" IFS
+
+  nft_chain PPTP_VPN_INPUT
+
+  nft_chain PPTP_VPN_FORWARD_IN
+
+  nft_chain PPTP_VPN_FORWARD_OUT
+
+  IFS=' ,'
+  for eif in $EXT_IF; do
+    case $eif in
+      ppp+)
+        echo "${INDENT}ERROR: Cannot distinguish between external and PPTP-VPN 'ppp+' interfaces."
+        echo "${INDENT}       ${PLUGIN_NAME} functionally is disabled."
+        return 0
+        ;;
+      ppp[0-9]*)
+        ppp_ifs="$ppp_ifs${ppp_ifs:+ }$eif"
+        ;;
+    esac
+  done
+  
+  # Setup PPTP VPN rules
+  if [ -n "$ppp_ifs" ]; then
+    echo "${INDENT}Excluding external interfaces '$ppp_ifs' from PPTP VPN"
+    IFS=' ,'
+    for eif in $ppp_ifs; do
+      nft_rule PPTP_VPN_INPUT "$(nft_if iifname $eif) return"
+      nft_rule PPTP_VPN_FORWARD_IN "$(nft_if iifname $eif) return"
+      nft_rule PPTP_VPN_FORWARD_OUT "$(nft_if oifname $eif) return"
+    done
+  fi
+  if [ -n "$PPTP_VPN_ALLOW_HOSTS" ]; then
+    echo "${INDENT}Allowing PPTP VPN packets to hosts: $PPTP_VPN_ALLOW_HOSTS"
+    IFS=' ,'
+    for host in $PPTP_VPN_ALLOW_HOSTS; do
+      nft_rule PPTP_VPN_INPUT "$(nft_addr daddr $host) accept"
+      nft_rule PPTP_VPN_FORWARD_IN "$(nft_addr daddr $host) accept"
+      nft_rule PPTP_VPN_FORWARD_OUT "$(nft_addr saddr $host) accept"
+    done
+  fi
+  if [ -n "$PPTP_VPN_DENY_HOSTS" ]; then
+    echo "${INDENT}Denying PPTP VPN packets to hosts: $PPTP_VPN_DENY_HOSTS"
+    IFS=' ,'
+    for host in $PPTP_VPN_DENY_HOSTS; do
+      if [ "$PPTP_VPN_DENY_LOG" = "1" ]; then
+        nft_rule PPTP_VPN_INPUT "$(nft_addr daddr $host) limit rate 3/minute burst 5 packets log prefix \"AIF:PPTP-VPN denied: \" level $LOGLEVEL"
+        nft_rule PPTP_VPN_FORWARD_IN "$(nft_addr daddr $host) limit rate 3/minute burst 5 packets log prefix \"AIF:PPTP-VPN denied: \" level $LOGLEVEL"
+        nft_rule PPTP_VPN_FORWARD_OUT "$(nft_addr saddr $host) limit rate 3/minute burst 5 packets log prefix \"AIF:PPTP-VPN denied: \" level $LOGLEVEL"
+      fi
+      nft_rule PPTP_VPN_INPUT "$(nft_addr daddr $host) drop"
+      nft_rule PPTP_VPN_FORWARD_IN "$(nft_addr daddr $host) drop"
+      nft_rule PPTP_VPN_FORWARD_OUT "$(nft_addr saddr $host) drop"
+    done
+  fi
+  # Default policy, allow all the rest
+  nft_rule PPTP_VPN_INPUT "accept"
+  nft_rule PPTP_VPN_FORWARD_IN "accept"
+  nft_rule PPTP_VPN_FORWARD_OUT "accept"
+
+  # Filter ppp+ traffic related to the PPTP VPN
+  if [ -n "$PPTP_VPN_NETS" ]; then
+    echo "${INDENT}Applying rules for PPTP VPN nets $PPTP_VPN_NETS"
+    IFS=' ,'
+    for net in $PPTP_VPN_NETS; do
+      # Adjust spoof check
+      nft_insert SPOOF_CHK "iifname \"ppp*\" $(nft_addr saddr $net) return"
+      
+      # Insert rule in the INPUT chain
+      nft_rule INPUT "iifname \"ppp*\" $(nft_addr saddr $net) jump PPTP_VPN_INPUT"
+      
+      # Insert rules in the FORWARD chain
+      nft_rule FORWARD "iifname \"ppp*\" $(nft_addr saddr $net) jump PPTP_VPN_FORWARD_IN"
+      nft_rule FORWARD "oifname \"ppp*\" $(nft_addr daddr $net) jump PPTP_VPN_FORWARD_OUT"
+    done
+  fi
+
+  echo "${INDENT}Allowing internet hosts $PPTP_VPN_TUNNEL_HOSTS to access the PPTP VPN service"
+  IFS=' ,'
+  for host in $(nft_hosts "$PPTP_VPN_TUNNEL_HOSTS"); do
+    nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) meta l4proto gre accept"
+    nft_rule EXT_INPUT_CHAIN "$(nft_addr saddr $host) tcp dport 1723 accept"
+  done
+  
+  return 0
+}
+
+
+# Plugin restart function
+plugin_restart()
+{
+
+  # Skip plugin_stop on a restart
+  plugin_start
+
+  return 0
+}
+
+
+# Plugin stop function
+plugin_stop()
+{
+  return 0
+}
+
+
+# Plugin status function
+plugin_status()
+{
+  return 0
+}
+
+
+# Check sanity of eg. environment
+plugin_sanity_check()
+{
+  # Sanity check
+  if [ -z "$PPTP_VPN_TUNNEL_HOSTS" ]; then
+    printf "\033[40m\033[1;31m${INDENT}ERROR: The plugin config file is not properly set!\033[0m\n" >&2
+    return 1
+  fi
+
+  return 0
+}
+
+
+############
+# Mainline #
+############
+
+# Check where to find the config file
+CONF_FILE=""
+if [ -n "$PLUGIN_CONF_PATH" ]; then
+  CONF_FILE="$PLUGIN_CONF_PATH/$PLUGIN_CONF_FILE"
+fi
+
+# Preinit to success:
+PLUGIN_RET_VAL=0
+
+# Check if the config file exists
+if [ ! -f "$CONF_FILE" ]; then
+  printf "NOTE: Config file \"$CONF_FILE\" not found!\n        Plugin \"$PLUGIN_NAME v$PLUGIN_VERSION\" ignored!\n" >&2
+else
+  # Source the plugin config file
+  . "$CONF_FILE"
+
+  if [ "$ENABLED" = "1" -a "$PLUGIN_CMD" != "stop-restart" ] ||
+     [ "$ENABLED" = "0" -a "$PLUGIN_CMD" = "stop-restart" ] ||
+     [ -n "$PLUGIN_LOAD_FILE" -a "$PLUGIN_CMD" = "stop" ] ||
+     [ -n "$PLUGIN_LOAD_FILE" -a "$PLUGIN_CMD" = "status" ]; then
+    # Show who we are:
+    echo "${INDENT}$PLUGIN_NAME v$PLUGIN_VERSION"
+
+    # Increment indention
+    INDENT="$INDENT "
+
+    # Only proceed if environment ok
+    if ! plugin_sanity_check; then
+      PLUGIN_RET_VAL=1
+    else
+      case $PLUGIN_CMD in
+        start|'') plugin_start; PLUGIN_RET_VAL=$? ;;
+        restart ) plugin_restart; PLUGIN_RET_VAL=$? ;;
+        stop|stop-restart) plugin_stop; PLUGIN_RET_VAL=$? ;;
+        status  ) plugin_status; PLUGIN_RET_VAL=$? ;;
+        *       ) PLUGIN_RET_VAL=1; printf "\033[40m\033[1;31m${INDENT}ERROR: Invalid plugin option \"$PLUGIN_CMD\"!\033[0m\n" >&2 ;;
+      esac
+    fi
+  fi
+fi

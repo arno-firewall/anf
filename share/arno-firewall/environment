@@ -1,0 +1,1992 @@
+# ------------------------------------------------------------------------------
+#                         -= Arno's (NFT) Firewall(AIF) =-
+#              Single- & multi-homed firewall script with DSL/ADSL support
+#
+#                           ~ In memory of my dear parents ~
+#
+# (C) Copyright 2001-2024 by Arno van Amersfoort & Lonnie Abelbeck
+# Web                   : https://github.com/arno-iptables-firewall/aif
+# Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
+#                         (note: you must remove all spaces and substitute the @ and the .
+#                         at the proper locations!)
+# ------------------------------------------------------------------------------
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# version 2 as published by the Free Software Foundation.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+# ------------------------------------------------------------------------------
+
+# NOTE: When used in combination with firewall.conf. Load firewall.conf first before calling us!
+
+# Some predefined variables/macros:
+ANYHOST="0/0"
+ANYPORT="0-65535"
+SEP="~"
+SEP2="#"
+SEP3="|"
+INDENT=""
+TAB="$(printf '\t')"
+EOL='
+'
+
+# Globals variables:
+RULE_WARNING=0
+DNS_FAST_FAIL_ONCE=0
+
+################################# Functions ####################################
+
+# Find command path with '/hint/path/command' as the argument
+find_command()
+{
+  local cmd IFS
+
+  IFS=' '
+  for cmd in $*; do
+    if [ -x "$cmd" ]; then
+      echo "$cmd"
+      return 0
+    fi
+  done
+
+  which $(basename "$1") 2>/dev/null
+  return 1
+}
+
+
+# Check whether a certain command is available
+check_command()
+{
+  local cmd path IFS
+
+  IFS=' '
+  for cmd in $*; do
+    case "$cmd" in
+      /*) path="" ;;
+      ip|tc|modprobe|sysctl) path="/sbin/" ;;
+      sed|cat|date|uname) path="/bin/" ;;
+      ipset) path="/usr/sbin/" ;;
+      *) path="/usr/bin/" ;;
+    esac
+
+    if [ -x "$path$cmd" ]; then
+      return 0
+    fi
+
+    if [ -n "$(which "$cmd" 2>/dev/null)" ]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+
+# Check whether a binary is available and if not, generate an error and stop program execution
+check_command_error()
+{
+  local IFS=' '
+
+  if ! check_command "$@"; then
+    printf "\033[40m\033[1;31mERROR  : Command(s) \"$(echo "$@" |tr ' ' '|')\" is/are not available!\033[0m\n" >&2
+    printf "\033[40m\033[1;31m         Please investigate. Quitting...\033[0m\n" >&2
+    echo ""
+    exit 2
+  fi
+}
+
+
+# Check whether a binary is available and if not, generate a warning but continue program execution
+check_command_warning()
+{
+  local retval IFS=' '
+
+  check_command "$@"
+  retval=$?
+
+  if [ $retval -ne 0 ]; then
+    printf "\033[40m\033[1;31mWARNING: Command(s) \"$(echo "$@" |tr ' ' '|')\" is/are not available!\033[0m\n" >&2
+    printf "\033[40m\033[1;31m         Please investigate. This *may* be a problem!\033[0m\n" >&2
+    echo ""
+  fi
+
+  return $retval
+}
+
+
+# Check if the current kernel is at least a certain version (or newer)
+# Arguments: major minor rev (eg. "2 6 25")
+# Return   : 0 = kernel is equal or newer, 1 = kernel is older
+######################################################################
+kernel_ver_chk()
+{
+  local maj min rev ver ver_maj ver_min ver_rev
+
+  if [ -n "$2" ]; then
+    maj="$1"
+    min="$2"
+    rev="$3"
+  else
+    maj=$(echo "$1" |cut -s -d'.' -f1)
+    min=$(echo "$1" |cut -s -d'.' -f2)
+    rev=$(echo "$1" |cut -s -d'.' -f3)
+  fi
+
+  ver=$(uname -r |cut -d'-' -f1)
+
+  ver_maj=$(echo "$ver" |cut -s -d'.' -f1)
+  if [ $ver_maj -gt $maj ]; then
+    return 0
+  elif [ $ver_maj -lt $maj ]; then
+    return 1
+  fi
+
+  ver_min=$(echo "$ver" |cut -s -d'.' -f2)
+  if [ $ver_min -gt $min ]; then
+    return 0
+  elif [ $ver_min -lt $min ]; then
+    return 1
+  fi
+
+  ver_rev=$(echo "$ver" |cut -s -d'.' -f3)
+  if [ $ver_rev -gt $rev ]; then
+    return 0
+  elif [ $ver_rev -lt $rev ]; then
+    return 1
+  fi
+
+  return 0
+}
+
+# nf_conntrack helper assignment
+# Example: load_conntrack_helper_module ftp tcp 21
+##
+# Usage: load_conntrack_helper_module HELPER PROTO PORTS
+load_conntrack_helper_module()
+{
+  local helper="$1" proto="$2" dport="$3" l3proto="inet"
+
+  modprobe_multi nf_conntrack_$helper ip_conntrack_$helper
+  if [ "$NAT" = "1" ]; then
+    modprobe_multi nf_nat_$helper ip_nat_$helper
+  fi
+
+  if [ "$helper" = "pptp" ]; then
+    l3proto="ip"
+  fi
+
+  # Helpers are always assigned explicitly (automatic assignment is gone since kernel 6.0)
+  nft_cmd "add ct helper inet $NFT_TABLE $helper-helper { type \"$helper\" protocol $proto; l3proto $l3proto; }"
+  nft_rule HELPER_PREROUTING "$proto dport { $(echo "$dport" |nft_ports |sed -r -e 's/[ ,]+/, /g') } ct helper set \"$helper-helper\""
+
+  if [ "$helper" = "ftp" ]; then
+    nft_rule CONNTRACK_HELPER "ct state related ct helper \"$helper\" $proto dport 1024-65535 accept"
+  else
+    nft_rule CONNTRACK_HELPER "ct state related ct helper \"$helper\" accept"
+  fi
+}
+
+# Linecount function
+lc()
+{
+  wc -l |awk '{ print $1 }'
+}
+
+
+################################################################################
+# nftables ruleset construction
+#
+# All chains and rules are collected in $NFT_BATCH and loaded by nft_commit in
+# one atomic transaction. If nft rejects anything, nothing is applied and the
+# previously active ruleset stays in place.
+################################################################################
+NFT_TABLE="aif"
+
+# Usage: nft_begin [update]
+# Without "update" the batch replaces our whole table, with "update" it only
+# changes the running table (eg. to reload the blocked hosts)
+nft_begin()
+{
+  NFT_BATCH="$(mktemp /tmp/aif-nft.XXXXXX)" || return 1
+
+  # Create-then-delete clears only our own table, so tables owned by others
+  # (docker, libvirt, fail2ban, ...) are left alone
+  if [ "$1" != "update" ]; then
+    printf 'table inet %s\ndelete table inet %s\ntable inet %s\n' \
+      "$NFT_TABLE" "$NFT_TABLE" "$NFT_TABLE" >"$NFT_BATCH"
+  fi
+}
+
+
+# Usage: nft_cmd "nft command"
+# Adds any other nft command (sets, elements, ct helpers, ...) to the batch
+nft_cmd()
+{
+  printf '%s\n' "$*" >>"$NFT_BATCH"
+}
+
+
+# Usage: nft_chain NAME ["base chain spec"]
+nft_chain()
+{
+  if [ -n "$2" ]; then
+    printf 'add chain inet %s %s { %s }\n' "$NFT_TABLE" "$1" "$2" >>"$NFT_BATCH"
+  else
+    printf 'add chain inet %s %s\n' "$NFT_TABLE" "$1" >>"$NFT_BATCH"
+  fi
+}
+
+
+# Usage: nft_rule CHAIN rule...
+nft_rule()
+{
+  local chain="$1" rule
+
+  shift
+
+  rule="$*"
+
+  # A configured protocol "icmp" means the ICMP version matching the
+  # addresses, or both without addresses, as the old ip6tables wrapper did
+  case " $rule " in
+    *" meta l4proto icmp "*)
+      case " $rule " in
+        *" ip6 "[sd]"addr "*) rule="$(echo "$rule" |sed -e 's/meta l4proto icmp /meta l4proto ipv6-icmp /')" ;;
+        *" ip "[sd]"addr "*)  ;;
+        *) rule="$(echo "$rule" |sed -e 's/meta l4proto icmp /meta l4proto { icmp, ipv6-icmp } /')" ;;
+      esac
+      ;;
+  esac
+
+  # Mixed IPv4/IPv6 addresses or ICMP versions can never match, skip them
+  case " $rule " in
+    *" ip saddr "*" ip6 daddr "*|*" ip6 saddr "*" ip daddr "*) return 0 ;;
+    *" ip "[sd]"addr "*" icmpv6 type "*|*" ip6 "[sd]"addr "*" icmp type "*) return 0 ;;
+  esac
+
+  printf '%s rule inet %s %s %s\n' "${NFT_OP:-add}" "$NFT_TABLE" "$chain" "$rule" >>"$NFT_BATCH"
+}
+
+
+# Usage: nft_insert CHAIN rule...
+# Like nft_rule, but inserts the rule at the top of the chain
+nft_insert()
+{
+  local NFT_OP="insert"
+
+  nft_rule "$@"
+}
+
+
+# Usage: nft_addr saddr|daddr HOST ["!="]
+# Prints the match for HOST with the right address family, nothing for any host
+nft_addr()
+{
+  case $2 in
+    0/0|"") ;;
+    *:*) echo "ip6 $1 $3${3:+ }$2" ;;
+    *)   echo "ip $1 $3${3:+ }$2" ;;
+  esac
+}
+
+
+# Usage: nft_if iifname|oifname IF ["!="]
+# Prints the interface match, translating the iptables '+' wildcard to '*'
+nft_if()
+{
+  case $2 in
+    +|"") ;;
+    *+) echo "$1 $3${3:+ }\"${2%+}*\"" ;;
+    *)  echo "$1 $3${3:+ }\"$2\"" ;;
+  esac
+}
+
+
+# Usage: nft_hosts HOSTS
+# Replaces ip_range() with the same comma separated output: expands w.x.y.z1-z2 to a native nft range and resolves
+# hostnames (both A and AAAA with IPv6 enabled), as iptables used to
+nft_hosts()
+{
+  local item addrs result="" IFS=' ,'
+
+  for item in $*; do
+    case $item in
+      0/0|*:*|*.*.*.*-*.*.*.*|*/*)
+        ;;
+      *.*.*.*-*)
+        item="$item-${item%.*}.${item##*-}"
+        item="${item%%-*}-${item##*-}"
+        ;;
+      *[!0-9.]*)
+        if ! addrs="$(gethostbyname "$item")" || [ -z "$addrs" ]; then
+          echo "** WARNING: Unable to resolve host \"$item\", skipped **" >&2
+          continue
+        fi
+        item="$(echo $addrs |tr ' ' ',')"
+        ;;
+    esac
+    result="$result${result:+,}$item"
+  done
+
+  echo "$result"
+}
+
+
+# Usage: nft_rate HITS SECONDS
+# Prints a per-element limit that is exceeded at more than HITS within SECONDS,
+# the nft counterpart of "-m recent --seconds SECONDS --hitcount HITS"
+nft_rate()
+{
+  if [ $(( $1 * 3600 )) -ge $2 ]; then
+    echo "limit rate over $(( ($1 * 3600 + $2 - 1) / $2 ))/hour burst $1 packets"
+  else
+    echo "limit rate over $(( ($1 * 86400 + $2 - 1) / $2 ))/day burst $1 packets"
+  fi
+}
+
+
+# Usage: nft_ports PORTS
+# Converts iptables style port ranges (a:b, :b, a:) to nft (a-b)
+nft_ports()
+{
+  sed -r -e 's/:/-/g' -e 's/-([ ,]|$)/-65535\1/g' -e 's/(^|[ ,])-/\10-/g'
+}
+
+
+nft_commit()
+{
+  local err_result retval bad_lines line pass=0 IFS=" "
+
+  # Like the old per-rule iptables calls, a rejected rule is reported and
+  # skipped while everything else is loaded. The load itself stays atomic.
+  while err_result="$($NFT -c -f "$NFT_BATCH" 2>&1)"; [ -n "$err_result" ] && [ $pass -lt 20 ]; do
+    pass=$((pass + 1))
+    bad_lines="$(echo "$err_result" |sed -n -r -e "s!^$NFT_BATCH:([0-9]+):.*!\1!p" |sort -un |tr '\n' ' ')"
+    if [ -z "$bad_lines" ]; then
+      break
+    fi
+
+    printf "\033[40m\033[1;31m%s\n\033[0m" "$err_result" >&2
+    for line in $bad_lines; do
+      # Only individual rules/elements may be skipped, a broken chain or set definition is fatal
+      if ! sed -n "${line}p" "$NFT_BATCH" |grep -q -e '^add rule ' -e '^insert rule ' -e '^add element '; then
+        bad_lines=""
+        break
+      fi
+      RULE_WARNING=$((RULE_WARNING + 1))
+    done
+    if [ -z "$bad_lines" ]; then
+      break
+    fi
+    awk -v bad=" $bad_lines" 'index(bad, " " NR " ") == 0' "$NFT_BATCH" >"$NFT_BATCH.new" && mv "$NFT_BATCH.new" "$NFT_BATCH"
+  done
+
+  err_result="$($NFT -f "$NFT_BATCH" 2>&1)"
+  retval=$?
+
+  if [ $retval -ne 0 ]; then
+    printf "\033[40m\033[1;31mERROR: nft rejected the ruleset, previous ruleset left in place:\n%s\n\033[0m" "$err_result" >&2
+    echo "Rejected ruleset kept as $NFT_BATCH" >&2
+  else
+    rm -f "$NFT_BATCH"
+  fi
+
+  return $retval
+}
+
+
+# Wrapper function for modprobe
+###############################
+modprobe()
+{
+  local result retval IFS=' '
+
+  # Module support available?
+  if [ -e /proc/modules ]; then
+    # Make sure environment variable is not set
+    MODPROBE_OPTIONS=""
+
+    result=`$MODPROBE $@ 2>&1`
+    retval=$?
+
+    if [ $retval -ne 0 ]; then
+      if ! echo "$result" |grep -q -e "Module .* not found" -e "Can't locate module" -e "^ *$"; then
+        # Show any (error) messages in red
+        printf "\033[40m\033[1;31m${MODPROBE} $*\nERROR ($retval): ${result}\033[0m\n" >&2
+      elif [ "$COMPILED_IN_KERNEL_MESSAGES" != "0" ]; then
+        printf "WARNING: Module \"$1\" failed to load. Assuming compiled-in-kernel.\n" >&2
+      fi
+      return $retval
+    else
+      if echo "$result" |grep -q -e '^WARNING:'; then
+        # Show any (warning) messages in red
+        printf "\033[40m\033[1;31m${MODPROBE} $*\nWARNING: ${result}\033[0m\n" >&2
+      else
+        echo "${INDENT}Loaded kernel module $1. $result"
+      fi
+      return 0
+    fi
+  elif [ "$COMPILED_IN_KERNEL_MESSAGES" != "0" ]; then
+    echo "${INDENT}NOTE: Kernel has no module support. Assuming compiled-in-kernel for module \"$1\""
+  fi
+
+  return 0
+}
+
+
+# Multi modprobe - Modprobe different modules until one succeeds, group modules with a comma
+modprobe_multi()
+{
+  local result retval OPTIONS="" MODULES="" IFS=' '
+
+  # Split options and modules
+  while [ -n "$1" ]; do
+    case "$1" in
+      -*) OPTIONS="$OPTIONS${OPTIONS:+ }$1";;
+       *) MODULES="${MODULES}${MODULES:+ }$1";;
+    esac
+    shift
+  done
+
+
+  # Module support available?
+  if [ -e /proc/modules ]; then
+    # Make sure environment variable is not set
+    MODPROBE_OPTIONS=""
+
+    local module modules fail modprobe_commandline
+
+    IFS=' '
+    for modules in $MODULES; do
+      fail=0
+      IFS=','
+      for module in $modules; do
+        modprobe_commandline="$MODPROBE"
+        if [ -n "$OPTIONS" ]; then
+          modprobe_commandline="$modprobe_commandline $OPTIONS"
+        fi
+        modprobe_commandline="$modprobe_commandline $module"
+
+        IFS=' '
+        result=`$modprobe_commandline 2>&1`
+        retval=$?
+
+        if [ $retval -ne 0 ]; then
+          if ! echo "$result" |grep -q -e "Module .* not found" -e "Can't locate module" -e "^ *$"; then
+            # Show any (error) messages in red
+            printf "\033[40m\033[1;31m${modprobe_commandline}\nERROR ($retval): $result\033[0m\n" >&2
+          fi
+          fail=1
+        else
+          if echo "$result" |grep -q -e '^WARNING:'; then
+            # Show any (warning) messages in red
+            printf "\033[40m\033[1;31m${modprobe_commandline}\nWARNING: $result\033[0m\n" >&2
+          else
+            echo "${INDENT}Loaded kernel module $module. $result"
+          fi
+        fi
+      done
+      if [ $fail -eq 0 ]; then
+        return 0
+      fi
+    done
+    if [ "$COMPILED_IN_KERNEL_MESSAGES" != "0" ]; then
+      printf "WARNING: Modules \"$(echo "$MODULES" |tr ' ' '|')\" failed to load. Assuming compiled-in-kernel.\n" >&2
+      return 1
+    fi
+  elif [ "$COMPILED_IN_KERNEL_MESSAGES" != "0" ]; then
+    echo "${INDENT}NOTE: Kernel has no module support. Assuming compiled-in-kernel for modules \"$(echo "$MODULES" |tr ' ' '|')\""
+  fi
+
+  return 0
+}
+
+
+# sysctl binary wrapper
+#######################
+sysctl()
+{
+  local result retval IFS=' '
+
+  result=`$SYSCTL "$@" 2>&1`
+  retval=$?
+
+  if [ $retval -ne 0 ]; then
+    # Show any (error) messages in red
+    printf "\033[40m\033[1;31m${SYSCTL} $*\nERROR ($retval): ${result}\033[0m\n" >&2
+    return $retval
+  fi
+
+  if [ -n "$result" ]; then
+    echo "${INDENT}$result"
+  fi
+
+  return 0
+}
+
+
+# Multi sysctl - Try sysctl-variables until one succeeds
+sysctl_multi()
+{
+  local result retval OPTIONS="" VARIABLES="" IFS=' '
+
+  while [ -n "$1" ]; do
+    # Combine options and exit on first non-option
+    case "$1" in
+      -*) OPTIONS="${OPTIONS}${OPTIONS:+ }$1";;
+       *) VARIABLES="${VARIABLES}${VARIABLES:+ }$1";;
+    esac
+    shift
+  done
+
+  IFS=' '
+  for variable in $VARIABLES; do
+    if $SYSCTL "$(echo "$variable" |cut -d'=' -f1)" >/dev/null 2>&1; then
+      local sysctl_commandline="$SYSCTL"
+      if [ -n "$OPTIONS" ]; then
+        sysctl_commandline="$sysctl_commandline $OPTIONS"
+      fi
+      sysctl_commandline="$sysctl_commandline $variable"
+
+      result=`$sysctl_commandline 2>&1`
+      retval=$?
+
+      if [ $retval -eq 0 ]; then
+        if [ -n "$result" ]; then
+          echo "${INDENT}$result"
+        fi
+        return 0
+      else
+        # Show any (error) messages in red
+        printf "\033[40m\033[1;31m${sysctl_commandline}\nERROR ($retval): $result\033[0m\n" >&2
+      fi
+    fi
+  done
+  printf "\033[40m\033[1;31mERROR: Unable to find kernel parameters \"$(echo "$VARIABLES" |tr ' ' '|')\"!\033[0m\n" >&2
+  return 1
+}
+
+
+# Set a value for sysctl wildcard interfaces (like "net.ipv4.conf.*.rp_filter")
+# $1 = prefix (eg. net.ipv4.conf)
+# $2 = variable (eg. rp_filter)
+# $3 = value to set
+sysctl_set_all()
+{
+  local prefix="$1" variable="$2" value="$3"
+  local interface line IFS
+
+  IFS=$EOL
+  for line in $($SYSCTL -a 2>/dev/null |cut -d' ' -f1 |grep "^${prefix}\..*\.${variable}$"); do
+    IFS=' ,'
+    for interface in all default lo $EXT_IF $INT_IF $DMZ_IF; do
+      if [ "$line" = "$prefix.$interface.$variable" ]; then
+        sysctl -w "$line=$value"
+        break
+      fi
+    done
+  done
+}
+
+
+sysctl_key_prefix()
+{
+  $SYSCTL -a 2>/dev/null |grep -q "^$1"
+}
+
+
+sysctl_key_match()
+{
+  $SYSCTL "$1" >/dev/null 2>&1
+}
+
+
+sysctl_get_value()
+{
+  $SYSCTL -n "$1" 2>/dev/null
+}
+
+
+# tc binary wrapper
+###################
+tc()
+{
+  $TC "$@"
+}
+
+
+# ip binary wrapper
+###################
+ip()
+{
+  $IP "$@"
+}
+
+
+# dig binary wrapper
+####################
+dig()
+{
+  local x=0 addr name lines item retval first dig_args IFS
+
+  if [ -n "$DIG" ]; then
+    dig_args="+noauthority +noadditional"
+
+    if [ "$DNS_FAST_FAIL" = "1" -o "$DNS_FAST_FAIL_ONCE" = "1" ]; then
+      dig_args="$dig_args +tries=1 +time=1"
+      DNS_FAST_FAIL_ONCE=0
+    fi
+
+    if [ "$IPV6_SUPPORT" = "1" ]; then
+      dig_args="$dig_args any"  # To obtain AAAA-record as well
+    fi
+
+    IFS=' '
+    lines="$($DIG $dig_args $@)"
+    retval=$?
+
+    first=1
+    IFS=$EOL
+    for item in $(echo "$lines" |awk '{ if (substr($0,0,1) != ";" && ($4 == "A" || $4 == "AAAA" || $4 == "PTR")) print $NF }'); do
+      if [ $first -eq 1 ]; then
+        first=0
+      else
+        printf " "
+      fi
+
+      printf "$item"
+    done
+    echo "" # Carriage return
+    return $retval
+  elif [ -n "$NSLOOKUP" ]; then
+    while [ $# -gt 1 ]; do
+      if [ "$1" = "-x" ]; then
+        x=1
+      fi
+      shift
+    done
+    if [ -n "$1" ]; then
+      if [ "$DNS_FAST_FAIL" = "1" -o "$DNS_FAST_FAIL_ONCE" = "1" ]; then
+        lines="$($NSLOOKUP -retry=1 -timeout=1 "$1" |sed -e "1,2d")"
+        DNS_FAST_FAIL_ONCE=0
+      else
+        lines="$($NSLOOKUP "$1" |sed -e "1,2d")"
+      fi
+
+      addr=""
+      name=""
+      IFS=$EOL
+      for line in $lines; do
+        case "$line" in
+                      'Address'*) addr="${addr}${addr:+ }$(echo "$line" |sed -n -r -e 's/^Address.*: *([0-9.]{7,}).*$/\1/p')"
+                                  ;;
+                     *'name = '*) name="${name}${name:+ }$(echo "$line" |sed -e 's/^.*name = *//' -e 's/ .*$//')"
+                                  ;;
+        esac
+      done
+
+      if [ $x -eq 0 -a -n "$addr" ]; then
+        echo "$addr"
+        return 0
+      elif [ $x -eq 1 -a -n "$name" ]; then
+        echo "$name"
+        return 0
+      fi
+
+      # Failure:
+      return 9
+    fi
+    return 1
+  else
+    return 9
+  fi
+}
+
+
+# Helper function to expand out wildcards in interface name list
+wildcard_ifs()
+{
+  local expnd if0 if1
+
+  expnd=""
+
+  local IFS=', '
+  for if0 in $*; do
+    if1="$if0"
+    case $if1 in
+    *+)
+      if1="${if1%+}"
+      if1="$(ip link | awk "\$2 ~ /${if1}[0-9]+:/ { print substr(\$2, 1, length(\$2)-1); }" | tr '\n' ' ')"
+      if [ -z "$if1" ]; then
+        echo "wildcard: $if0 unmatched!" >&2
+        continue
+      fi
+      ;;
+    esac
+    expnd="$expnd${expnd:+ }$if1"
+  done
+  echo "$expnd"
+}
+
+
+parse_rule()
+{
+  local rule="$1" var="$2" type="$3" left_rule right_rule
+
+  case $type in
+
+  hosts-ports|hosts-protos)
+    hosts=$(get_hosts_ihp "$rule")
+    ports=$(get_ports_ihp "$rule")
+    if [ -z "$hosts" -o -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  hosts:ANYHOST-ports:ANYPORT|hosts:ANYHOST-protos)
+    hosts=$(get_hosts_ihp "$rule" "$ANYHOST")
+    if [ "$type" = "hosts:ANYHOST-ports:ANYPORT" ]; then
+      ports=$(get_ports_ihp "$rule" "$ANYPORT")
+    else
+      ports=$(get_ports_ihp "$rule")
+    fi
+    if [ -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  interfaces-ports|interfaces-protos)
+    interfaces=$(get_ifs "$rule")
+    ports=$(get_ports_ip "$rule")
+    if [ -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  interfaces-srcips-ports|interfaces-srcips-protos)
+    interfaces=$(get_ifs "$rule")
+    srcips=$(get_ips "$rule")
+    ports=$(get_ports_ip "$rule")
+    if [ -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  interfaces-srcips-hosts)
+    interfaces=$(get_ifs "$rule")
+    srcips=$(get_ips "$rule")
+    hosts=$(get_hosts_ih "$rule")
+    if [ -z "$hosts" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    ;;
+
+  interfaces-srcips-hosts-ports|interfaces-srcips-hosts-protos)
+    interfaces=$(get_ifs "$rule")
+    srcips=$(get_ips "$rule")
+    hosts=$(get_hosts_ihp "$rule")
+    ports=$(get_ports_ihp "$rule")
+    if [ -z "$hosts" -o -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  interfaces-destips-ports|interfaces-destips-protos)
+    interfaces=$(get_ifs "$rule")
+    destips=$(get_ips "$rule")
+    ports=$(get_ports_ip "$rule")
+    if [ -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  interfaces-destips-hosts)
+    interfaces=$(get_ifs "$rule")
+    destips=$(get_ips "$rule")
+    hosts=$(get_hosts_ih "$rule")
+    if [ -z "$hosts" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    ;;
+
+  interfaces-destips-hosts-ports|interfaces-destips-hosts-protos)
+    interfaces=$(get_ifs "$rule")
+    destips=$(get_ips "$rule")
+    hosts=$(get_hosts_ihp "$rule")
+    ports=$(get_ports_ihp "$rule")
+    if [ -z "$hosts" -o -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  shosts:ANYHOST-dhosts-ports:ANYPORT|shosts:ANYHOST-dhosts-ports|shosts:ANYHOST-dhosts-protos)
+    left_rule=$(echo "$rule" |cut -s -d'>' -f1)
+    right_rule=$(echo "$rule" |cut -d'>' -f2)
+
+    shosts=$(get_hosts_ih "$left_rule" "$ANYHOST")
+    dhosts=$(get_hosts_hp "$right_rule")
+    if [ "$type" = "shosts:ANYHOST-dhosts-ports:ANYPORT" ]; then
+      ports=$(get_ports_hp "$right_rule" "$ANYPORT")
+    else
+      ports=$(get_ports_hp "$right_rule")
+    fi
+    if [ -z "$dhosts" -o -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  interfaces-shosts:ANYHOST-dhosts-ports:ANYPORT|interfaces-shosts:ANYHOST-dhosts-protos)
+    left_rule=$(echo "$rule" |cut -s -d'>' -f1)
+    right_rule=$(echo "$rule" |cut -d'>' -f2)
+
+    interfaces=$(get_ifs "$left_rule")
+    shosts=$(get_hosts_ih "$left_rule" "$ANYHOST")
+    dhosts=$(get_hosts_hp "$right_rule")
+    if [ "$type" = "interfaces-shosts:ANYHOST-dhosts-ports:ANYPORT" ]; then
+      ports=$(get_ports_hp "$right_rule" "$ANYPORT")
+    else
+      ports=$(get_ports_hp "$right_rule")
+    fi
+    if [ -z "$dhosts" -o -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  interfaces-shosts-dhosts-ports:ANYPORT|interfaces-shosts-dhosts-protos)
+    left_rule=$(echo "$rule" |cut -s -d'>' -f1)
+    right_rule=$(echo "$rule" |cut -s -d'>' -f2)
+
+    interfaces=$(get_ifs "$left_rule")
+    shosts=$(get_hosts_ih "$left_rule")
+    dhosts=$(get_hosts_hp "$right_rule")
+    if [ "$type" = "interfaces-shosts-dhosts-ports:ANYPORT" ]; then
+      ports=$(get_ports_hp "$right_rule" "$ANYPORT")
+    else
+      ports=$(get_ports_hp "$right_rule")
+    fi
+    if [ -z "$shosts" -o -z "$dhosts" -o -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  interfaces:EXT_IF-shosts-dhosts-ports:ANYPORT|interfaces:EXT_IF-shosts-dhosts-protos)
+    left_rule=$(echo "$rule" |cut -s -d'>' -f1)
+    right_rule=$(echo "$rule" |cut -s -d'>' -f2)
+
+    interfaces=$(get_ifs "$left_rule" "$EXT_IF")
+    shosts=$(get_hosts_ih "$left_rule")
+    dhosts=$(get_hosts_hp "$right_rule")
+    if [ "$type" = "interfaces:EXT_IF-shosts-dhosts-ports:ANYPORT" ]; then
+      ports=$(get_ports_hp "$right_rule" "$ANYPORT")
+    else
+      ports=$(get_ports_hp "$right_rule")
+    fi
+    if [ -z "$shosts" -o -z "$dhosts" -o -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    ;;
+
+  interfaces:EXT_IF-destips-shosts-ports-dhost_dport|interfaces:EXT_IF-destips-shosts-protos-dhost)
+    left_rule=$(echo "$rule" |cut -s -d'>' -f1)
+    right_rule=$(echo "$rule" |cut -s -d'>' -f2)
+
+    interfaces=$(get_ifs "$left_rule" "$EXT_IF")
+    destips=$(get_ips "$left_rule")
+
+    # Check for separator(SEP)
+    if echo "$left_rule" |grep -q "$SEP"; then
+      shosts=$(get_hosts_ihp "$left_rule")
+      ports=$(get_ports_ihp "$left_rule")
+    else
+      # Assume ports/protos only if no separator
+      shosts="$ANYHOST"
+      ports=$(get_ports_ip "$left_rule")
+    fi
+
+    dhost_dport="$right_rule"
+    if [ -z "$shosts" -o -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    dhost="$dhost_dport"
+    ;;
+
+  interfaces:NAT_IF-destips-shosts-ports-dhost_dport|interfaces:NAT_IF-destips-shosts-protos-dhost)
+    left_rule=$(echo "$rule" |cut -s -d'>' -f1)
+    right_rule=$(echo "$rule" |cut -s -d'>' -f2)
+
+    interfaces=$(get_ifs "$left_rule" "$NAT_IF")
+    destips=$(get_ips "$left_rule")
+
+    # Check for separator(SEP)
+    if echo "$left_rule" |grep -q "$SEP"; then
+      shosts=$(get_hosts_ihp "$left_rule")
+      ports=$(get_ports_ihp "$left_rule")
+    else
+      # Assume ports/protos only if no separator
+      shosts="$ANYHOST"
+      ports=$(get_ports_ip "$left_rule")
+    fi
+
+    dhost_dport="$right_rule"
+    if [ -z "$shosts" -o -z "$ports" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    protos="$ports"
+    dhost="$dhost_dport"
+    ;;
+
+  shosts:ANYHOST-dhosts)
+    left_rule=$(echo "$rule" |cut -s -d'>' -f1)
+    right_rule=$(echo "$rule" |cut -d'>' -f2)
+
+    shosts=$(get_hosts_ih "$left_rule" "$ANYHOST")
+    dhosts=$(get_hosts_hp "$right_rule")
+
+    if [ -z "$dhosts" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    ;;
+
+  shosts-dhosts:ANYHOST)
+    left_rule=$(echo "$rule" |cut -d'>' -f1)
+    right_rule=$(echo "$rule" |cut -s -d'>' -f2)
+
+    shosts=$(get_hosts_ih "$left_rule")
+    dhosts=$(get_hosts_hp "$right_rule" "$ANYHOST")
+
+    if [ -z "$shosts" ]; then
+      parse_rule_warning "$rule"
+      return 1
+    fi
+    ;;
+
+  *)
+    echo "** ERROR: Invalid rule parse type \"$type\"!" >&2
+    return 1
+    ;;
+
+  esac
+
+  return 0
+}
+
+
+parse_rule_warning()
+{
+  local rule="$1"
+
+  RULE_WARNING=$((RULE_WARNING + 1))
+
+  echo "** WARNING: In variable $var, Rule: \"$rule\" is ignored." >&2
+}
+
+
+# Helper function to get interface(s) from variable
+get_ifs()
+{
+  local result=""
+
+  if echo "$1" |grep -q -e "$SEP2"; then
+    result="$(echo "$1" |cut -s -d"$SEP2" -f1 |grep -v -e '[.][0-9][0-9]*[.]' -e ':[0-9a-fA-F]*:' -e "$ANYHOST" |tr ' ' ',')"
+  fi
+
+  if [ -n "$result" ]; then
+    echo "$result"
+    return 0
+  else
+    if [ -n "$2" ]; then
+      echo "$2"
+    else
+      echo "+"
+    fi
+    return 1
+  fi
+}
+
+
+# Helper function to get source/destination interface IP(s) from variable
+get_ips()
+{
+  local result=""
+
+  if echo "$1" |grep -q -e "$SEP2"; then
+    result="$(echo "$1" |cut -s -d"$SEP2" -f1 |grep -e '[.][0-9][0-9]*[.]' -e ':[0-9a-fA-F]*:' -e "$ANYHOST" |tr ' ' ',')"
+  fi
+
+  if [ -n "$result" ]; then
+    echo "$result"
+    return 0
+  else
+    if [ -n "$2" ]; then
+      echo "$2"
+    else
+      echo "$ANYHOST"
+    fi
+    return 1
+  fi
+}
+
+
+# Helper function to get hostname(s) from variable (ifs|ips#hosts)
+get_hosts_ih()
+{
+  local result="$(echo "$1" |sed "s!^.*$SEP2!!")"
+
+  if [ -n "$result" ]; then
+    echo "$result"
+    return 0
+  else
+    echo "$2"
+    return 1
+  fi
+}
+
+
+# Helper function to get hostname(s) from variable (ifs|ips#hosts~ports|protos)
+get_hosts_ihp()
+{
+  local result="$(echo "$1" |sed "s!^.*$SEP2!!" |cut -s -d"$SEP" -f1)"
+
+  if [ -n "$result" ]; then
+    echo "$result"
+    return 0
+  else
+    echo "$2"
+    return 1
+  fi
+}
+
+
+# Helper function to get port(s) from variable (ifs|ips#hosts~ports|protos)
+get_ports_ihp()
+{
+  local result="$(echo "$1" |sed "s!^.*$SEP2!!")"
+
+  if echo "$result" |grep -q -e "$SEP"; then
+    echo "$result" |cut -s -d"$SEP" -f2 |nft_ports
+    return 0
+  elif [ -n "$2" ]; then
+    # Use default, if specified
+    echo "$2"
+    return 1
+  else
+    # When we have no separator, assume port(s) only and no host(s)
+    echo "$result" |nft_ports
+    return 0
+  fi
+}
+
+
+# Helper function to get hostname(s) from variable (hosts~ports|protos)
+get_hosts_hp()
+{
+  local result="$(echo "$1" |sed "s!^.*$SEP2!!")"
+
+  if echo "$result" |grep -q -e "$SEP"; then
+    echo "$result" |cut -s -d"$SEP" -f1
+    return 0
+  elif [ -n "$2" ]; then
+    # Use default, if specified
+    echo "$2"
+    return 1
+  else
+    # When we have no separator, assume host(s) only and no port(s)
+    echo "$result"
+    return 0
+  fi
+}
+
+
+# Helper function to get port(s) from variable (hosts~ports|protos)
+get_ports_hp()
+{
+  local result="$(echo "$1" |sed "s!^.*$SEP2!!")"
+
+  if echo "$result" |grep -q -e "$SEP"; then
+    echo "$result" |cut -s -d"$SEP" -f2 |nft_ports
+    return 0
+  else
+    echo "$2"
+    return 1
+  fi
+}
+
+
+# Helper function to get port(s) from variable (ifs|ips#ports|protos)
+get_ports_ip()
+{
+  local result="$(echo "$1" |sed "s!^.*$SEP2!!")"
+
+  if [ -n "$result" ]; then
+    echo "$result" |nft_ports
+    return 0
+  else
+    echo "$2"
+    return 1
+  fi
+}
+
+
+get_numeric_ip_version()
+{
+  case $1 in
+  0/0)
+    ;;
+  [0-9][0-9.][0-9.][0-9.][0-9.]*.*[0-9])
+    return 4
+    ;;
+  [0-9]*.*/*[0-9]|[0-9]/*[0-9]|[1-9][0-9]/*[0-9]|[12][0-9][0-9]/*[0-9])
+    return 4
+    ;;
+  *:*)
+    return 6
+    ;;
+  esac
+
+  return 0 # Unknown, possibly a hostname
+}
+
+
+# Is argument IPv4 numeric?
+is_numeric_ipv4()
+{
+  if [ "$1" = "0/0" ]; then
+    return 0 # Consider 0/0 also as numeric
+  fi
+
+  get_numeric_ip_version "$1"
+  if [ $? -eq 4 ]; then
+    return 0
+  fi
+
+  return 1
+}
+
+
+# Is argument IPv6 numeric?
+is_numeric_ipv6()
+{
+  if [ "$1" = "0/0" ]; then
+    return 0 # Consider 0/0 also as numeric
+  fi
+
+  get_numeric_ip_version "$1"
+  if [ $? -eq 6 ]; then
+    return 0
+  fi
+
+  return 1
+}
+
+
+# Is argument a (numeric) IP?
+is_numeric_ip()
+{
+  if [ "$1" = "0/0" ]; then
+    return 0 # Consider 0/0 also as numeric
+  fi
+
+  get_numeric_ip_version "$1"
+  if [ $? -ne 0 ]; then
+    return 0
+  fi
+
+  return 1
+}
+
+
+# Helper function to resolve an IP to a DNS name
+# $1 = IP. $2 (optional) = Additional arguments for dig. stdout = DNS name
+gethostbyaddr()
+{
+  local host="$1" result retval=0
+
+  # We can't resolve addresses with a subnet mask
+  case "$host" in
+    */*) return 1 ;;
+  esac
+
+  # Don't try to resolve DNS names:
+  if ! is_numeric_ip "$host"; then
+    # It's a DNS name already, so just return it
+    echo "$host"
+    return 0
+  fi
+
+  shift
+  result="$(dig -x "$@" "$host")"
+  retval=$?
+
+  if [ $retval -eq 0 ]; then
+    if [ -n "$result" ]; then
+      echo "$result"
+      return 0
+    else
+      return 1
+    fi
+  else
+    return $retval
+  fi
+}
+
+
+# Helper function to resolve a DNS name to an IP
+# $1 = Hostname. $2 (optional) = Additional arguments for dig. stdout = IP
+gethostbyname()
+{
+  local host="$1" result retval=0
+
+  # Don't try to resolve IPs:
+  if is_numeric_ip "$host"; then
+    # It's an IP already, so just return it
+    echo "$host"
+    return 0
+  fi
+
+  shift
+  result="$(dig "$@" "$host")"
+  retval=$?
+
+  if [ $retval -eq 0 ]; then
+    if [ -n "$result" ]; then
+      echo "$result"
+      return 0
+    else
+      return 1
+    fi
+  else
+    return $retval
+  fi
+}
+
+
+# Get resolved host->ip from host cache
+# Arguments : $1 = hostname to resolve
+# Returns   : 0 = Got result, 1 = no result, 2 = in cache with no-ip. IP is send to stdout (if any).
+# NOTE      : Hosts with multiple IPs are outputted space separated
+get_dynamic_host_from_cache()
+{
+  local host="$1"
+
+  if is_numeric_ip "$host"; then
+    echo "$host"
+    return 0
+  fi
+
+  if [ -f "$HOST_CACHE_FILE" ]; then
+    # First try to get host from host-cache
+    local find_host="$(grep "^$host " -m1 "$HOST_CACHE_FILE")"
+    if [ -n "$find_host" ]; then
+      local host_ip="$(echo "$find_host" |cut -s -d' ' -f2 |tr ',' ' ')"
+
+      if [ "$host_ip" = "NO_IP" ]; then
+        host_ip=""
+        return 2 # NO-IP result
+      elif [ -n "$host_ip" ]; then
+        echo "$host_ip"
+        return 0
+      fi
+    fi
+  fi
+
+  return 1 # No result
+}
+
+
+# Get IP for (dynamic) host. In case it already exists in our cache and is not too old
+# use that else resolve and store in our cache
+# Arguments : $1 = hostname to resolve
+# Returns   : Resolved host's IP in "$host_ip"
+# NOTE      : Hosts with multiple IPs are outputted space separated
+get_dynamic_host_cached()
+{
+  host_ip=""            # Reset result
+  local host="$1"
+  local retval=0
+  local cache_lookup=""
+  local cache_time=0 fail_count=0
+  local max_age cur_time store_ip threshold count
+
+  # Don't try to resolve stuff that's already numeric
+  if is_numeric_ip "$host"; then
+    host_ip="$host"
+    return 0
+  fi
+
+  printf "${INDENT}Resolving host \"$host\" -> "
+
+  # Check whether we already have it in our cache
+  if [ -f "${HOST_CACHE_FILE}" ]; then
+    cache_lookup="$(grep "^$host " -m1 "${HOST_CACHE_FILE}")"
+    if [ -n "$cache_lookup" ]; then
+      # Check whether it's not too old
+      cache_time="$(echo "$cache_lookup" |cut -d' ' -f3)"
+      cur_time="$(($(date +'%s') / 60))"
+
+      if [ -n "$DNS_MAX_AGE" ]; then
+        max_age="$DNS_MAX_AGE"
+      else
+        max_age=10 # Fallback to 10 minutes
+      fi
+
+      # Check cache age
+      if [ -n "$cache_time" -a $cache_time -le $cur_time -a $cur_time -le $((cache_time + max_age)) ]; then
+        host_ip="$(echo "$cache_lookup" |cut -d' ' -f2)"
+        if [ -n "$host_ip" ]; then
+          echo "$host_ip (cached)"
+
+          if [ "$host_ip" = "NO_IP" ]; then
+            host_ip=""
+            return 1
+          fi
+          return 0
+        fi
+      fi
+    fi
+  fi
+
+  DNS_FAST_FAIL_ONCE="$DNS_FAST_FAIL"
+  host_ip="$(gethostbyname "$host" |tr ' ' ',')"
+  gethost_retval=$?
+
+  # Update cache time
+  cache_time="$(($(date +'%s') / 60))"
+
+  if [ $gethost_retval -ne 0 -o -z "$host_ip" ]; then
+    retval=1 # Error
+
+    # Use value from cache as a fallback, but only if allowed
+    if [ -n "$cache_lookup" ]; then
+      count="$(echo "$cache_lookup" |cut -s -d' ' -f4)"
+      if [ -n "$count" ]; then
+        fail_count=$count
+      fi
+
+      # Try to get from (old) cache, if allowed
+      if [ "$DNS_FAIL_THRESHOLD" != "0" ]; then
+        host_ip="$(echo "$cache_lookup" |cut -s -d' ' -f2)"
+      fi
+    fi
+
+    if [ -z "$host_ip" -o "$host_ip" = "NO_IP" ]; then
+      host_ip=""
+      printf "\033[40m\033[1;31mFAILED!\n\033[0m"
+      echo "** ERROR: Unresolvable host \"$host\" and no old IP to fallback on! **" >&2
+    else
+      echo "$host_ip (cached!)"
+      echo "** WARNING($retval): Unresolvable host \"$host\". Re-using old IP ($host_ip)! **" >&2
+
+      # Ignore error:
+      retval=0
+    fi
+
+    if [ -n "$DNS_FAIL_THRESHOLD" ]; then
+      threshold=$DNS_FAIL_THRESHOLD
+    else
+      threshold=4 # default
+    fi
+
+    # Increment fail count
+    fail_count=$((fail_count + 1))
+
+    # Check fail count
+    if [ $threshold -gt 0 -a $fail_count -ge $threshold ]; then
+      fail_count=1
+    fi
+  else
+    echo "$host_ip"
+    cache_time="$(($(date +'%s') / 60))"
+    fail_count=0
+  fi
+
+  if [ -z "$host_ip" ]; then
+    # NOTE Explicitly store empty results as well else we'll keep trying over and over again for each plugin/rule
+    store_ip="NO_IP"
+  else
+    store_ip="$host_ip"
+  fi
+
+  if [ -n "$cache_lookup" ]; then
+    # Update existing entry
+    sed -i "s/^$host[[:blank:]].*/$host $store_ip $cache_time $fail_count/" "${HOST_CACHE_FILE}"
+  else
+    # Add new entry
+    echo "$host $store_ip $(($(date +'%s') / 60)) $fail_count" >>"${HOST_CACHE_FILE}"
+  fi
+
+  return $retval
+}
+
+
+# Leave lock function to release lock
+# $1 = Lock (file) name
+lock_leave()
+{
+  local LOCK_FILE RETVAL=0
+
+  if [ -z "$1" ]; then
+    echo "ERROR: Exception due to missing lock argument" >&2
+    return 1 # Failure
+  fi
+
+  LOCK_FILE="/var/lock/aif_$1.lock"
+
+  # Remove lockfile
+  if ! rm -f "$LOCK_FILE"; then
+    echo "ERROR: Failed to remove lock file: $LOCK_FILE" >&2
+    RETVAL=1
+  fi
+
+  # Disable int handler
+  trap - INT TERM EXIT
+
+  return $RETVAL
+}
+
+
+lock_ctrl_handler()
+{
+  lock_leave "$1"
+
+  stty intr ^C 2>/dev/null # Back to normal
+  exit         # Yep, I meant to do that... Kill/hang the shell.
+}
+
+
+# Internal lock_enter() function. Only to be used by lock_enter_single() and lock_enter() (below)
+# $1 = Lock (file) name
+lock_enter_internal()
+{
+  local LOCK_FILE="$1"
+  local PID
+
+  # Check lock PID:
+  # If cat isn't able to read the file, another instance is probably
+  # about to remove the lock -- exit, we're *still* locked
+  # Thanks to Grzegorz Wierzowiecki for pointing out this race condition on
+  # http://wiki.grzegorz.wierzowiecki.pl/code:mutex-in-bash
+  PID="$(cat "$LOCK_FILE" 2>/dev/null)"
+  if [ $? -eq 0 ]; then
+    if ! kill -0 "$PID" 2>/dev/null; then
+      # lock is stale, remove it and restart
+      echo "WARNING: Removing stale lockfile \"$LOCK_FILE\" of nonexistant PID \"$PID\"" >&2
+      rm -f "$LOCK_FILE"
+    fi
+  fi
+
+  # Acquire lock
+  if ( set -o noclobber; echo "$$" > "$LOCK_FILE") 2> /dev/null; then
+    # Setup int handler
+    trap "lock_ctrl_handler $LOCK_FILE" INT TERM EXIT
+
+    return 0 # Lock success
+  fi
+
+  return 1 # Lock failure
+}
+
+
+# Lock enter function to acquire a single lock. Prevents running of multiple instances
+# When an instance is already running, this (new) instance will be aborted
+# $1 = Lock (file) name
+# $2 = Amount of retries (optional, defaults to 5)
+lock_enter_single()
+{
+  local LOCK_FILE="/var/lock/aif_$1.lock"
+
+  if [ -z "$1" ]; then
+    echo "ERROR: Exception due to missing lock argument" >&2
+    return 1 # Failure
+  fi
+
+  if lock_enter_internal "$LOCK_FILE"; then
+    return 0 # Lock success
+  fi
+
+  echo "NOTE: Another instance is already running for lockfile \"$LOCK_FILE\". Held by PID $(cat $LOCK_FILE)" >&2
+  return 1 # Lock failed
+}
+
+
+# Lock enter function to acquire lock. Prevents running of multiple instances
+# When an instance is already running, a new instance will wait until the lock is released (in case a timeout is reached, it will be aborted)
+# $1 = Lock (file) name
+# $2 = Amount of retries (optional, defaults to 5)
+lock_enter()
+{
+  local LOCK_FILE="/var/lock/aif_$1.lock"
+  local MAX_RETRIES="${2:-5}"
+  local FAIL_COUNT=0
+
+  if [ -z "$1" ]; then
+    echo "ERROR: Exception due to missing lock argument" >&2
+    return 1 # Failure
+  fi
+
+  while [ $FAIL_COUNT -lt $MAX_RETRIES ]; do
+    if lock_enter_internal "$LOCK_FILE"; then
+      return 0 # Lock success
+    fi
+
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+
+    # Sleep between retries
+    sleep 1
+  done
+
+  echo "ERROR: Failed to acquire lockfile \"$LOCK_FILE\". Held by PID $(cat $LOCK_FILE)" >&2
+
+  return 1 # Lock failed
+}
+
+
+# Function to wait for lock to be released
+# $1 = Lock (file) name
+# $2 = Optional wait time in seconds (default = 5 seconds)
+lock_wait()
+{
+  local LOCK_FILE="/var/lock/aif_$1.lock"
+  local cnt="${2:-5}" # Default to 5 seconds
+
+  if [ -z "$1" ]; then
+    echo "ERROR: Exception due to missing lock argument" >&2
+    return 1 # Failure
+  fi
+
+  # Wait for lock to disappear
+  while [ $cnt -gt 0 ]; do
+    if [ ! -f "$LOCK_FILE" ]; then
+      return 0 # Lock wait success
+    fi
+
+    cnt=$((cnt - 1))
+    sleep 1
+  done
+
+  return 1 # Lock wait failed
+}
+
+
+# Helper function to show interfaces / ips in front of verbose line
+# $1 =  interfaces. $2 = ips
+show_if_ip()
+{
+  # Only show interfaces if not empty:
+  if [ -n "$1" -a "$1" != "+" ]; then
+    printf "($1) "
+  fi
+
+  # Only show destination IPs if not empty:
+  if [ -n "$2" -a "$2" != "$ANYHOST" ]; then
+    printf "($2) "
+  fi
+}
+
+
+# Helper function to show hosts:ports
+# $1 = host. $2 = ports
+show_hosts_ports()
+{
+  # Only show interfaces if not empty:
+  if [ -n "$1" ]; then
+    printf "$1:$2"
+  else
+    printf "$2"
+  fi
+}
+
+
+# Helper function to translate host ranges from variable
+ip_range()
+{
+  local FIRST IFS=' '
+  
+  # Return the args if there is no '-' for improved execution speed
+  case "$@" in
+    *-*) ;;
+      *) echo "$@"; return;;
+  esac
+
+  FIRST=1
+
+  IFS=', '
+  # Get variable from commandline
+  for item in $*; do
+    # Check whether an IP range was specified (only works like w.x.y.z1-z2!):
+    start="$(echo "$item" |cut -s -d'-' -f1 |awk -F'.' '{ print $NF }' |grep -e '[0-9]')"
+    host_base="$(echo "$item" |cut -s -d'-' -f1 |awk -F'.' '{ for (i=1; i<NF; i++) printf ("%s.",$i) }')"
+    stop="$(echo "$item" |cut -s -d'-' -f2 |grep -e '[0-9]')"
+
+    if [ -n "$stop" -a -n "$start" ]; then
+      IFS=' '
+      for x in `seq -s' ' $start $stop`; do
+        if [ $FIRST -eq 1 ]; then
+          FIRST=0
+        else
+          printf ","
+        fi
+        printf "$host_base$x"
+      done
+    else
+      if [ $FIRST -eq 1 ]; then
+        FIRST=0
+      else
+        printf ","
+      fi
+      printf "$item"
+    fi
+  done
+}
+
+
+# Log message function. Message is read from stdin
+# $1 = Optional prefix
+log_msg()
+{
+  local PREFIX="$1"
+
+  # Get message from stdin
+  IFS=$EOL
+  while read LINE; do
+    # Have sed remove any colouring
+    echo "${PREFIX}${LINE}" |sed 's/\x1B\[[0-9;]\+[A-Za-z]//g' |logger -t firewall -p user.info
+  done
+}
+
+
+# Display progress bar, 0% to 100% in 2% increments
+progress_bar()
+{
+  # Args: cur_cnt total_cnt
+  local prev
+
+  if [ $2 -gt 0 ]; then
+    if [ $1 -eq 0 ]; then
+      progress_percent=0
+      printf " 0%%"
+    else
+      cur=$(($1 / $2))
+      if [ $progress_percent -lt $cur ]; then
+        prev=$progress_percent
+        while [ $prev -le $cur ]; do
+          if [ $progress_percent -lt $prev ]; then
+            progress_percent=$prev
+            if [ $((progress_percent % 20)) -eq 0 ]; then
+              printf "$progress_percent%%"
+            else
+              printf "."
+            fi
+          fi
+          prev=$((prev + 2))
+        done
+      fi
+    fi
+  fi
+}
+
+
+# Check existence of an interface
+check_interface()
+{
+  local interface IFS=' '
+
+  local interfaces="$(ip -o link show | cut -d':' -f2)"
+
+  unset IFS
+  for interface in $interfaces; do
+    case "$1" in
+      # Wildcard interface?
+      *+) if [ "${1%+}" = "${interface%%[0-9]*}" ]; then
+            return 0
+          fi
+          ;;
+       *) if [ "${1}" = "${interface%@*}" ]; then
+            return 0
+          fi
+          ;;
+    esac
+  done
+
+  # Interface not found
+  return 1
+}
+
+# Get all IP address(es)/mask(s) of specified network interface
+get_network_ipv4_address_mask_all()
+{
+  ip -o addr show dev "$1" 2>/dev/null \
+    |awk '$3 == "inet" { print $4 }' |tr '\n' ' ' |sed s,' $',,
+}
+
+# Get (primary) IP address/mask of specified network interface
+get_network_ipv4_address_mask()
+{
+  get_network_ipv4_address_mask_all "$1" |cut -d' ' -f1
+}
+
+# Get all IP address(es) of the specified network interface
+get_network_ipv4_address_all()
+{
+  ip -o addr show dev "$1" 2>/dev/null \
+    |awk '$3 == "inet" { print $4 }' |cut -f1 -d'/' |tr '\n' ' ' |sed s,' $',,
+}
+
+# Get (primary) IP address of the specified network interface
+get_network_ipv4_address()
+{
+  get_network_ipv4_address_mask "$1" |cut -f1 -d'/'
+}
+
+# Get (primary) netmask of the specified network interface
+get_network_ipv4_mask()
+{
+  get_network_ipv4_address_mask "$1" |cut -f2 -d'/'
+}
+
+# Get broadcast address of the specified network interface
+get_network_ipv4_broadcast()
+{
+  ip -o addr show dev "$1" 2>/dev/null \
+    |awk '$3 == "inet" && $5 == "brd" { print $6; exit; }'
+}
+
+# Get IPv6 address/mask of specified network interface
+get_network_ipv6_address_mask()
+{
+  ip -o addr show dev "$1" 2>/dev/null \
+    |awk '$3 == "inet6" { print $4; exit; }'
+}
+
+# Get IPv6 address of the specified network interface
+get_network_ipv6_address()
+{
+  get_network_ipv6_address_mask "$1" |cut -f1 -d'/'
+}
+
+# Get IPv6 netmask of the specified network interface
+get_network_ipv6_mask()
+{
+  get_network_ipv6_address_mask "$1" |cut -f2 -d'/'
+}
+
+
+################################# Main ####################################
+
+# Set file to store which plugins are loaded
+PLUGIN_LOAD_FILE="/var/tmp/aif_active_plugins"
+PLUGIN_LOAD_FILE_RESTART="/var/tmp/aif_active_plugins_restart"
+
+# (Dynamic) host cache. Used by compatible plugins
+HOST_CACHE_FILE="/var/tmp/aif_host_cache"
+
+# Check for a local/global config file
+######################################
+if [ -f "$LOCAL_CONFIG_FILE" ]; then
+  . "$LOCAL_CONFIG_FILE"
+fi
+
+# Source config directory (conf.d)
+##################################
+if [ -z "$LOCAL_CONFIG_DIR" ]; then
+  LOCAL_CONFIG_DIR="/etc/arno-firewall/conf.d"
+fi
+if [ -d "$LOCAL_CONFIG_DIR" ] && ls "$LOCAL_CONFIG_DIR"/*.conf >/dev/null 2>&1; then
+  unset IFS
+  for conf_file in "$LOCAL_CONFIG_DIR/"*.conf; do
+    . "$conf_file"
+  done
+fi
+
+# if $LOGLEVEL is not set, default to "info"
+############################################
+if [ -z "$LOGLEVEL" ]; then
+  LOGLEVEL="info"
+fi
+
+# nft only knows syslog level names, map the numeric and iptables style ones
+case $LOGLEVEL in
+  0|panic)   LOGLEVEL="emerg" ;;
+  1)         LOGLEVEL="alert" ;;
+  2)         LOGLEVEL="crit" ;;
+  3|error)   LOGLEVEL="err" ;;
+  4|warning) LOGLEVEL="warn" ;;
+  5)         LOGLEVEL="notice" ;;
+  6)         LOGLEVEL="info" ;;
+  7)         LOGLEVEL="debug" ;;
+esac
+
+# Detect all binaries
+#####################
+if [ -z "$NFT" ]; then
+  NFT="$(find_command /sbin/nft /usr/sbin/nft)"
+fi
+
+IP="$(find_command /sbin/ip)"
+
+TC="$(find_command /sbin/tc /usr/sbin/tc)"
+
+SYSCTL="$(find_command /sbin/sysctl)"
+
+MODPROBE="$(find_command /sbin/modprobe)"
+
+DIG="$(find_command /usr/bin/dig)"
+
+if [ -z "$DIG" ]; then
+  NSLOOKUP="$(find_command /usr/bin/nslookup)"
+fi
+
+# Setup IPv6 detected environment variable
+if sysctl_key_prefix net.ipv6.conf; then
+  IPV6_DETECTED=1
+else
+  IPV6_DETECTED=0
+  IPV6_SUPPORT=0
+fi
+
+# Default NAT_INTERNAL_NET to INTERNAL_NET, if not specified
+############################################################
+if [ -z "$NAT_INTERNAL_NET" ]; then
+  NAT_INTERNAL_NET="$INTERNAL_NET"
+fi
+
+# Default NAT_IF to EXT_IF, if not specified
+#############################################################
+if [ -z "$NAT_IF" ]; then
+  NAT_IF="$EXT_IF"
+fi
+
+# IPv6 ICMPv6 types that are allowed, not including echo-request (128)
+######################################################################
+ICMPV6_SPECIAL_TYPES="133 134 135 136"
+
+# IPv6 ICMPv6 Multicast Listener Discovery (RFC 2710, 3810)
+######################################################################
+ICMPV6_MLD_TYPES="130 131 132 143"
+
+# Default conntrack match method, if needed the main script will
+# fallback to an older method after the conntrack modules are loaded.
+######################################################################
+NF_CONNTRACK_STATE="-m conntrack --ctstate"
+
+# Set system wide share path
+############################
+if [ -z "$USR_SHARE_PATH" ]; then
+  USR_SHARE_PATH="/usr/local/share/arno-firewall"
+  if [ ! -d "$USR_SHARE_PATH" ]; then
+    USR_SHARE_PATH="/usr/share/arno-firewall"
+    if [ ! -d "$USR_SHARE_PATH" ]; then
+      echo "** ERROR: Unable to determine USR_SHARE_PATH!" >&2
+    fi
+  fi
+fi
+
+# Check plugin bin path and fallback in case it's empty
+#######################################################
+if [ -z "$PLUGIN_BIN_PATH" ]; then
+  PLUGIN_BIN_PATH="$USR_SHARE_PATH/plugins"
+fi
+
+# File containing (background) jobs to run
+JOBS_FILE="/var/tmp/aif_jobs"
+
+# Lock file for accessing the JOBS_FILE
+JOBS_LOCK_NAME="jobs"
+
+# Jobs process (file) name
+JOB_PROCESSOR="$USR_SHARE_PATH/aif-job-processor"
+
+JOB_EXECUTER="$USR_SHARE_PATH/aif-job-execute"
+
+# Check plugin bin path and fallback in case it's empty
+#######################################################
+if [ -z "$PLUGIN_CONF_PATH" ]; then
+  if [ -d "/etc/arno-firewall/plugins" ]; then
+    PLUGIN_CONF_PATH="/etc/arno-firewall/plugins"
+  fi
+fi
+
+# Check for EXT_NET_BCAST_ADDRESS and autodetect if empty
+#########################################################
+if [ -z "$EXT_NET_BCAST_ADDRESS" -a -n "$EXT_IF" ]; then
+  ext_count=0
+  IFS=' ,'
+  for eif in $EXT_IF; do
+    found=0
+    for eif1 in $(wildcard_ifs $eif); do
+      baddr="$(get_network_ipv4_broadcast "$eif1")"
+
+      # NOTE: If no broadcast address found, then probably interface is not up (yet)
+      if [ -n "$baddr" ]; then
+        EXT_NET_BCAST_ADDRESS="${EXT_NET_BCAST_ADDRESS}${EXT_NET_BCAST_ADDRESS:+ }${baddr}"
+        found=1
+      fi
+    done
+
+    ext_count=$((ext_count + 1))
+    if [ $found -eq 0 -a -n "$EXTERNAL_NET" ]; then
+      ext_net="$(echo "$EXTERNAL_NET" |awk "{ print \$$ext_count }")"
+
+      case "$ext_net" in
+        */24) baddr="$(echo "$ext_net" |awk -F. '{ print $1"."$2"."$3".255" }')" ;;
+        */16) baddr="$(echo "$ext_net" |awk -F. '{ print $1"."$2".255.255" }')" ;;
+         */8) baddr="$(echo "$ext_net" |awk -F. '{ print $1".255.255.255" }')" ;;
+           *) baddr="" ;;
+      esac
+
+      if [ -n "$baddr" ]; then
+        EXT_NET_BCAST_ADDRESS="${EXT_NET_BCAST_ADDRESS}${EXT_NET_BCAST_ADDRESS:+ }${baddr}"
+      fi
+    fi
+  done
+fi
+
+# Check for EXTERNAL_NET and autodetect if empty
+################################################
+if [ -z "$EXTERNAL_NET" -a -n "$EXT_IF" ]; then
+  IFS=' ,'
+  for eif in $EXT_IF; do
+    for eif1 in $(wildcard_ifs $eif); do
+      addr_mask="$(get_network_ipv4_address_mask "$eif1")"
+
+      # NOTE: If no mask found, then probably interface is not up (yet)
+      if [ -n "$addr_mask" ]; then
+        EXTERNAL_NET="${EXTERNAL_NET}${EXTERNAL_NET:+ }${addr_mask}"
+      fi
+    done
+  done
+fi

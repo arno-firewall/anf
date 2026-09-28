@@ -3,7 +3,7 @@
 MY_VERSION="1.14d"
 
 # ------------------------------------------------------------------------------------------
-#                         -= Arno's Iptables Firewall(AIF) =-
+#                         -= Arno's (NFT) Firewall(AIF) =-
 #              Single- & multi-homed firewall script with DSL/ADSL support
 #
 #                           ~ In memory of my dear parents ~
@@ -33,10 +33,10 @@ EOL='
 
 # Check if the environment file exists and if so, load it
 #########################################################
-if [ -f ./share/arno-iptables-firewall/environment ]; then
-  . ./share/arno-iptables-firewall/environment
+if [ -f ./share/arno-firewall/environment ]; then
+  . ./share/arno-firewall/environment
 else
-  printf "\033[40m\033[1;31mERROR: Could not read environment file ./share/arno-iptables-firewall/environment!\033[0m\n" >&2
+  printf "\033[40m\033[1;31mERROR: Could not read environment file ./share/arno-firewall/environment!\033[0m\n" >&2
   exit 2
 fi
 
@@ -292,13 +292,13 @@ get_user_yn()
 
 check_18_version()
 {
-  if grep -q "^MY_VERSION=" "/etc/init.d/arno-iptables-firewall" 2>/dev/null; then
+  if grep -q "^MY_VERSION=" "/etc/init.d/arno-firewall" 2>/dev/null; then
     if get_user_yn "WARNING: An old version is still installed. Removing it first is *STRONGLY* recommended. Remove" "y"; then
-      rm -fv /etc/init.d/arno-iptables-firewall
-      mv -fv /etc/arno-iptables-firewall/custom-rules /etc/arno-iptables-firewall/custom-rules.old
-      mv -fv /etc/arno-iptables-firewall/firewall.conf /etc/arno-iptables-firewall/firewall.conf.old
-      rm -fv /etc/arno-iptables-firewall/plugins/*.plugin
-      rm -fv /etc/rc*.d/*arno-iptables-firewall
+      rm -fv /etc/init.d/arno-firewall
+      mv -fv /etc/arno-firewall/custom-rules /etc/arno-firewall/custom-rules.old
+      mv -fv /etc/arno-firewall/firewall.conf /etc/arno-firewall/firewall.conf.old
+      rm -fv /etc/arno-firewall/plugins/*.plugin
+      rm -fv /etc/rc*.d/*arno-firewall
     fi
   fi
 }
@@ -306,7 +306,7 @@ check_18_version()
 
 check_dist_version()
 {
-  if [ -f /usr/sbin/arno-iptables-firewall ]; then
+  if [ -f /usr/sbin/arno-firewall ]; then
     if ! get_user_yn "WARNING: It seems a distribution version is already installed. It's *STRONGLY* recommended to remove it first. Continue anyway" "n"; then
       return 1
     fi
@@ -319,12 +319,12 @@ check_dist_version()
 # Check plugins for (old) versions with different priority
 check_plugins()
 {
-  if [ -d /usr/local/share/arno-iptables-firewall/plugins ] && ls /usr/local/share/arno-iptables-firewall/plugins/*.plugin >/dev/null 2>&1; then
+  if [ -d /usr/local/share/arno-firewall/plugins ] && ls /usr/local/share/arno-firewall/plugins/*.plugin >/dev/null 2>&1; then
     unset IFS
-    for PLUGIN_FILE in ./share/arno-iptables-firewall/plugins/*.plugin; do
+    for PLUGIN_FILE in ./share/arno-firewall/plugins/*.plugin; do
       PLUGIN_NAME="$(basename "$PLUGIN_FILE" |sed 's/^[0-9]*//')"
 
-      ls /usr/local/share/arno-iptables-firewall/plugins/*.plugin 2>/dev/null |grep "/[0-9]*${PLUGIN_NAME}$" |grep -v "/$(basename "$PLUGIN_FILE")$" |while IFS=$EOL read PLUGIN_OLD; do
+      ls /usr/local/share/arno-firewall/plugins/*.plugin 2>/dev/null |grep "/[0-9]*${PLUGIN_NAME}$" |grep -v "/$(basename "$PLUGIN_FILE")$" |while IFS=$EOL read PLUGIN_OLD; do
         echo "* Removing old plugin: $PLUGIN_OLD"
         rm -fv "$PLUGIN_OLD"
       done
@@ -337,19 +337,19 @@ setup_start_scripts()
 {
   # Install init.d script, but only if init.d folder exists
   if [ -d "/etc/init.d" ]; then
-    copy_overwrite ./etc/init.d/arno-iptables-firewall /etc/init.d/
+    copy_overwrite ./etc/init.d/arno-firewall /etc/init.d/
   fi
 
   # Make sure only one service file exists in /lib/.. or /usr/lib/ where we prefer /lib/
-  rm -f /usr/lib/systemd/system/arno-iptables-firewall.service
+  rm -f /usr/lib/systemd/system/arno-firewall.service
 
   # Install service file if systemd directory is available, use fallbacks to support different systems
   if [ -d "/lib/systemd/system" ]; then
-    copy_overwrite ./lib/systemd/system/arno-iptables-firewall.service /lib/systemd/system/
+    copy_overwrite ./lib/systemd/system/arno-firewall.service /lib/systemd/system/
   elif [ -d "/usr/lib/systemd/system" ]; then
-    copy_overwrite ./lib/systemd/system/arno-iptables-firewall.service /usr/lib/systemd/system/
+    copy_overwrite ./lib/systemd/system/arno-firewall.service /usr/lib/systemd/system/
   elif [ -d "/etc/systemd/system" ]; then
-    copy_ask_if_exist ./lib/systemd/system/arno-iptables-firewall.service /etc/systemd/system/ "y"
+    copy_ask_if_exist ./lib/systemd/system/arno-firewall.service /etc/systemd/system/ "y"
   else
     echo "NOTE: Could not find any systemd/system directory, skipping systemd configuration" >&2
   fi
@@ -361,46 +361,46 @@ setup_start_scripts()
   fi
 
   # Remove any symlinks in rc*.d out of the way
-  rm -f $RC_PATH/rc0.d/*arno-iptables-firewall
-  rm -f $RC_PATH/rc1.d/*arno-iptables-firewall
-  rm -f $RC_PATH/rc2.d/*arno-iptables-firewall
-  rm -f $RC_PATH/rc3.d/*arno-iptables-firewall
-  rm -f $RC_PATH/rc4.d/*arno-iptables-firewall
-  rm -f $RC_PATH/rc5.d/*arno-iptables-firewall
-  rm -f $RC_PATH/rc6.d/*arno-iptables-firewall
-  rm -f $RC_PATH/rcS.d/*arno-iptables-firewall
+  rm -f $RC_PATH/rc0.d/*arno-firewall
+  rm -f $RC_PATH/rc1.d/*arno-firewall
+  rm -f $RC_PATH/rc2.d/*arno-firewall
+  rm -f $RC_PATH/rc3.d/*arno-firewall
+  rm -f $RC_PATH/rc4.d/*arno-firewall
+  rm -f $RC_PATH/rc5.d/*arno-firewall
+  rm -f $RC_PATH/rc6.d/*arno-firewall
+  rm -f $RC_PATH/rcS.d/*arno-firewall
 
   if get_user_yn "Do you want to start the firewall at boot" "y"; then
     DONE=0
 
     if check_command systemctl; then
-      if systemctl enable arno-iptables-firewall; then
+      if systemctl enable arno-firewall; then
         echo "* Successfully enabled service with systemctl"
         DONE=1
       fi
     elif check_command update-rc.d; then
       # Note: Currently update-rc.d doesn't seem to properly use the init script's LSB header, so specify explicitly
-      if update-rc.d -f arno-iptables-firewall start 11 S . stop 10 0 6 .; then
+      if update-rc.d -f arno-firewall start 11 S . stop 10 0 6 .; then
         echo "* Successfully enabled service with update-rc.d"
         DONE=1
       fi
     elif check_command chkconfig; then
-      if chkconfig --add arno-iptables-firewall && chkconfig arno-iptables-firewall on; then
+      if chkconfig --add arno-firewall && chkconfig arno-firewall on; then
         echo "* Successfully enabled service with chkconfig"
         DONE=1
       fi
     else
       if [ -d "$RC_PATH/rcS.d" ]; then
-        if ln -sv /etc/init.d/arno-iptables-firewall "$RC_PATH/rcS.d/S11arno-iptables-firewall" &&
-          ln -sv /etc/init.d/arno-iptables-firewall "$RC_PATH/rc0.d/K10arno-iptables-firewall" &&
-          ln -sv /etc/init.d/arno-iptables-firewall "$RC_PATH/rc6.d/K10arno-iptables-firewall"; then
+        if ln -sv /etc/init.d/arno-firewall "$RC_PATH/rcS.d/S11arno-firewall" &&
+          ln -sv /etc/init.d/arno-firewall "$RC_PATH/rc0.d/K10arno-firewall" &&
+          ln -sv /etc/init.d/arno-firewall "$RC_PATH/rc6.d/K10arno-firewall"; then
           echo "* Successfully enabled service through $RC_PATH/rcS.d/ symlink"
           DONE=1
         fi
       elif [ -d "$RC_PATH/rc2.d" ]; then
-        if ln -sv /etc/init.d/arno-iptables-firewall "$RC_PATH/rc2.d/S09arno-iptables-firewall" &&
-          ln -sv /etc/init.d/arno-iptables-firewall "$RC_PATH/rc0.d/K91arno-iptables-firewall" &&
-          ln -sv /etc/init.d/arno-iptables-firewall "$RC_PATH/rc6.d/K91arno-iptables-firewall"; then
+        if ln -sv /etc/init.d/arno-firewall "$RC_PATH/rc2.d/S09arno-firewall" &&
+          ln -sv /etc/init.d/arno-firewall "$RC_PATH/rc0.d/K91arno-firewall" &&
+          ln -sv /etc/init.d/arno-firewall "$RC_PATH/rc6.d/K91arno-firewall"; then
           echo "* Successfully enabled service through $RC_PATH/rc2.d/ symlink"
           DONE=1
         fi
@@ -417,9 +417,9 @@ setup_start_scripts()
 
 
 # main line:
-AIF_VERSION="$(grep "MY_VERSION=" ./bin/arno-iptables-firewall |sed -e "s/^MY_VERSION=\"//" -e "s/\"$//")"
+AIF_VERSION="$(grep "MY_VERSION=" ./bin/arno-firewall |sed -e "s/^MY_VERSION=\"//" -e "s/\"$//")"
 
-printf "\033[40m\033[1;32mArno's Iptables Firewall Script(AIF) v$AIF_VERSION\033[0m\n"
+printf "\033[40m\033[1;32mArno's (NFT) Firewall Script(AIF) v$AIF_VERSION\033[0m\n"
 printf "Install Script v$MY_VERSION\n"
 echo "-------------------------------------------------------------------------------"
 
@@ -442,46 +442,46 @@ if ! check_dist_version; then
   exit 1
 fi
 
-copy_overwrite ./bin/arno-iptables-firewall /usr/local/sbin/
+copy_overwrite ./bin/arno-firewall /usr/local/sbin/
 copy_overwrite ./bin/arno-fwfilter /usr/local/bin/
 
 # Remove old version:
 rm -f /usr/local/sbin/arno-fwfilter
 
-mkdir -pv /usr/local/share/arno-iptables-firewall/plugins || exit 1
-copy_overwrite ./share/arno-iptables-firewall/ /usr/local/share/arno-iptables-firewall/
+mkdir -pv /usr/local/share/arno-firewall/plugins || exit 1
+copy_overwrite ./share/arno-firewall/ /usr/local/share/arno-firewall/
 
 if [ ! -f /usr/local/sbin/traffic-accounting-show ]; then 
-  ln -sv /usr/local/share/arno-iptables-firewall/plugins/traffic-accounting-show /usr/local/sbin/traffic-accounting-show
+  ln -sv /usr/local/share/arno-firewall/plugins/traffic-accounting-show /usr/local/sbin/traffic-accounting-show
 fi
 
 mkdir -pv /usr/local/share/man/man1 || exit 1
 mkdir -pv /usr/local/share/man/man8 || exit 1
-gzip -c -v ./share/man/man8/arno-iptables-firewall.8 >/usr/local/share/man/man8/arno-iptables-firewall.8.gz
+gzip -c -v ./share/man/man8/arno-firewall.8 >/usr/local/share/man/man8/arno-firewall.8.gz
 gzip -c -v ./share/man/man1/arno-fwfilter.1 >/usr/local/share/man/man8/arno-fwfilter.1.gz
 
-mkdir -pv /usr/local/share/doc/arno-iptables-firewall || exit 1
-copy_overwrite ./README /usr/local/share/doc/arno-iptables-firewall/
+mkdir -pv /usr/local/share/doc/arno-firewall || exit 1
+copy_overwrite ./README /usr/local/share/doc/arno-firewall/
 
 # Install rsyslog config file (if rsyslog is available)
 if [ -d "/etc/rsyslog.d" ]; then
-  copy_ask_if_exist ./etc/rsyslog.d/arno-iptables-firewall.conf /etc/rsyslog.d/ "y" "old" "dist"
+  copy_ask_if_exist ./etc/rsyslog.d/arno-firewall.conf /etc/rsyslog.d/ "y" "old" "dist"
 fi
 
-copy_ask_if_exist ./etc/logrotate.d/arno-iptables-firewall /etc/logrotate.d/ "y"
+copy_ask_if_exist ./etc/logrotate.d/arno-firewall /etc/logrotate.d/ "y"
 
-mkdir -pv /etc/arno-iptables-firewall || exit 1
+mkdir -pv /etc/arno-firewall || exit 1
 
-copy_overwrite ./etc/arno-iptables-firewall/firewall.conf /etc/arno-iptables-firewall/firewall.conf.dist
-copy_ask_if_exist ./etc/arno-iptables-firewall/firewall.conf /etc/arno-iptables-firewall/
+copy_overwrite ./etc/arno-firewall/firewall.conf /etc/arno-firewall/firewall.conf.dist
+copy_ask_if_exist ./etc/arno-firewall/firewall.conf /etc/arno-firewall/
 
-copy_skip_if_exist ./etc/arno-iptables-firewall/custom-rules /etc/arno-iptables-firewall/
+copy_skip_if_exist ./etc/arno-firewall/custom-rules /etc/arno-firewall/
 
-mkdir -pv /etc/arno-iptables-firewall/plugins || exit 1
-copy_ask_if_exist ./etc/arno-iptables-firewall/plugins/ /etc/arno-iptables-firewall/plugins/ "n" "old" "dist"
+mkdir -pv /etc/arno-firewall/plugins || exit 1
+copy_ask_if_exist ./etc/arno-firewall/plugins/ /etc/arno-firewall/plugins/ "n" "old" "dist"
 
-mkdir -pv /etc/arno-iptables-firewall/conf.d || exit 1
-echo "Files with a .conf extension in this directory will be sourced by the environment file" >/etc/arno-iptables-firewall/conf.d/README
+mkdir -pv /etc/arno-firewall/conf.d || exit 1
+echo "Files with a .conf extension in this directory will be sourced by the environment file" >/etc/arno-firewall/conf.d/README
 
 # Check old plugins
 check_plugins
@@ -500,14 +500,14 @@ fi
 echo ""
 echo "-------------------------------------------------------------------------------"
 echo "** NOTE: You can now (manually) start the firewall by executing              **"
-echo "**       \"/usr/local/sbin/arno-iptables-firewall start\"                      **"
+echo "**       \"/usr/local/sbin/arno-firewall start\"                      **"
 echo "**       It is recommended however to first review the settings in           **"
-echo "**       /etc/arno-iptables-firewall/firewall.conf!                          **"
+echo "**       /etc/arno-firewall/firewall.conf!                          **"
 echo "-------------------------------------------------------------------------------"
 echo ""
 
 if get_user_yn "(Re)start firewall"; then
-  /usr/local/sbin/arno-iptables-firewall restart
+  /usr/local/sbin/arno-firewall restart
 fi
 
 exit 0
