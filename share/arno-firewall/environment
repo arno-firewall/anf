@@ -168,20 +168,29 @@ kernel_ver_chk()
 # Example: load_conntrack_helper_module ftp tcp 21
 ##
 # Remove the rules of the iptables version (Arno's Iptables Firewall), so they don't
-# interfere with this version. A running one is recognised by its BASE_INPUT_CHAIN.
+# interfere with this version. A running one is recognised by its BASE_INPUT_CHAIN
+# (in either IPv4 or IPv6).
 # A stopped one leaves only a FORWARD policy of DROP (and with stop-block a few
 # INPUT/loopback rules), that is removed when the iptables version is (or was)
 # installed and iptables holds nothing else
 remove_iptables_version()
 {
-  local cmd table
+  local cmd table running=0
+
+  # In IPv4 mode it only creates its chains for IPv4 and just DROPs all IPv6, so
+  # when it runs in either family, both are its rules
+  for cmd in iptables ip6tables; do
+    if check_command $cmd && $cmd -n -L BASE_INPUT_CHAIN >/dev/null 2>&1; then
+      running=1
+    fi
+  done
 
   for cmd in iptables ip6tables; do
     if ! check_command $cmd; then
       continue
     fi
 
-    if $cmd -n -L BASE_INPUT_CHAIN >/dev/null 2>&1; then
+    if [ $running -eq 1 ]; then
       echo "Removing the rules of the (running) iptables version ($cmd)"
     elif [ -e /etc/arno-iptables-firewall -o -e /usr/local/sbin/arno-iptables-firewall -o -e /usr/sbin/arno-iptables-firewall ] &&
          $cmd-save 2>/dev/null |grep -q -e '^:[A-Z]* DROP ' -e '^-A ' &&
