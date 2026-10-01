@@ -2,7 +2,7 @@
 #                 -= Arno's (NFT) Firewall(ANF) - Docker plugin =-
 #
 PLUGIN_NAME="Docker plugin"
-PLUGIN_VERSION="1.01"
+PLUGIN_VERSION="1.02"
 PLUGIN_CONF_FILE="docker.conf"
 #
 # Last changed          : October 1, 2026
@@ -71,11 +71,17 @@ plugin_start()
   nft_rule FORWARD "jump DOCKER_FORWARD"
 
   # Ports (services) on this host the containers may use
-  if [ -n "$DOCKER_HOST_OPEN_TCP" -o -n "$DOCKER_HOST_OPEN_UDP" ]; then
+  if [ "$DOCKER_HOST_OPEN_ALL" = "1" -o -n "$DOCKER_HOST_OPEN_TCP" -o -n "$DOCKER_HOST_OPEN_UDP" ]; then
     nft_chain DOCKER_INPUT
 
     IFS=' ,'
     for interface in $DOCKER_IF; do
+      if [ "$DOCKER_HOST_OPEN_ALL" = "1" ]; then
+        printf "\033[40m\033[1;31m${INDENT}WARNING: Allowing ALL traffic from Docker interface $interface to this host!\033[0m\n" >&2
+        nft_rule DOCKER_INPUT "$(nft_if iifname $interface) accept"
+        continue
+      fi
+
       if [ -n "$DOCKER_HOST_OPEN_TCP" ]; then
         echo "${INDENT}Allowing Docker interface $interface to this host for TCP port(s): $DOCKER_HOST_OPEN_TCP"
         for port in $(echo "$DOCKER_HOST_OPEN_TCP" |nft_ports); do
