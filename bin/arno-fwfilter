@@ -47,9 +47,6 @@ RESOLVE_NAMES = 1
 # Enable this option if you want to (try to) obtain the IPs geographical location (can be very slow!)
 SHOW_LOCATION = 0
 
-# Enable this option if you want to resolve both the source and target host when doing location/name lookups (slower)
-FULL_INFO = 0
-
 # Enable this option to use ANSI colors (increases readability)
 USE_ANSI_COLORS = 1
 
@@ -356,7 +353,7 @@ NAME_CACHE = {}
 
 
 def resolve_name(ip):
-    """First name of ip (via dig, like before), without a name (or dig) the ip itself"""
+    """First name of ip (via dig), without a name (or dig) the ip itself"""
     if ip not in NAME_CACHE:
         name = ''
         try:
@@ -368,7 +365,7 @@ def resolve_name(ip):
         except (OSError, subprocess.SubprocessError):
             pass
         NAME_CACHE[ip] = name or ip
-    return ' %s  ' % NAME_CACHE[ip]
+    return NAME_CACHE[ip]
 
 
 LOCATION_CACHE = {}
@@ -388,16 +385,22 @@ def location(ip):
     return LOCATION_CACHE[ip]
 
 
-def host_info(ip, kind):
+def host(ip, kind):
+    """Name (or IP) of ip, with its location if enabled, in the color of kind"""
+    out = color_on(kind) + ' '
+    out += resolve_name(ip) if RESOLVE_NAMES == 1 else ip
+    if SHOW_LOCATION == 1:
+        out += location(ip)
+    return out + color_off()
+
+
+def hosts_info(src_ip, dst_ip):
+    """Both hosts on one line: src -> dst"""
     out = ''
     if RESOLVE_NAMES == 1 or SHOW_LOCATION == 1:
         if USE_1ROW == 0:
             out += newline_indent()
-    out += color_on(kind)
-    if RESOLVE_NAMES == 1:
-        out += resolve_name(ip)
-    if SHOW_LOCATION == 1:
-        out += location(ip)
+        out += host(src_ip, 'src') + ' ->' + host(dst_ip, 'dst')
     return out
 
 
@@ -408,10 +411,6 @@ def filter_line(line):
 
     if 'IN=' not in line:
         return line
-
-    # Check whether it is an incoming or outgoing packet
-    is_input = 0 if 'IN= ' in line else 1
-    is_output = 0 if 'OUT= ' in line else 1
 
     f = [''] + line.split()     # f[1]..f[nf], like awk's $1..$NF
     nf = len(f) - 1
@@ -445,12 +444,7 @@ def filter_line(line):
             # Show destination
             out += color_on('dst') + ' ' + fi + color_off()
 
-            if is_input == 1 or FULL_INFO == 1:
-                out += host_info(src_host, 'src')
-            if is_output == 1 or FULL_INFO == 1:
-                out += host_info(dst_host, 'dst')
-
-            out += color_off()
+            out += hosts_info(src_host, dst_host)
             break
         i += 1
 
