@@ -11,6 +11,11 @@ arno-fwfilter < logfile
 .TP
 Realtime firewall logging on tty10:
 tail \-\-follow <logfile> | arno-fwfilter >/dev/tty10 &
+.TP
+Firewall messages from the journal (also realtime with \-f):
+journalctl \-k \-g '^(ANF|AIF):' | arno-fwfilter
+.SH "REQUIREMENTS"
+Python 3. For resolving IPs to names \fBdig\fR is used; without it (or without a name) the IP is shown.
 .SH "OPTIONS"
 .TP
 \fB\-\-help\fR, \fB\-h\fR

@@ -56,6 +56,9 @@ sanity_check()
   check_command_error logger
   check_command_warning dig nslookup
 
+  # Used by arno-fwfilter (optional):
+  check_command_warning python3
+
   # Helper utilities
   check_command_error awk
   check_command_error tr
