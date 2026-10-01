@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MY_VERSION="1.15"
+MY_VERSION="1.15a"
 
 # ------------------------------------------------------------------------------------------
 #                         -= Arno's (NFT) Firewall(ANF) =-
@@ -657,7 +657,10 @@ gzip -c -v ./share/man/man8/arno-firewall.8 >/usr/local/share/man/man8/arno-fire
 gzip -c -v ./share/man/man1/arno-fwfilter.1 >/usr/local/share/man/man8/arno-fwfilter.1.gz
 
 mkdir -pv /usr/local/share/doc/arno-firewall || exit 1
-copy_overwrite ./README /usr/local/share/doc/arno-firewall/
+
+# Remove old version:
+rm -fv /usr/local/share/doc/arno-firewall/README
+copy_overwrite ./README.md /usr/local/share/doc/arno-firewall/
 
 # Install rsyslog config file (if rsyslog is available)
 if [ -d "/etc/rsyslog.d" ]; then

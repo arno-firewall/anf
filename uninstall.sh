@@ -129,6 +129,7 @@ rm -rfv /usr/local/share/arno-firewall
 
 rm -fv /usr/local/share/man/man8/arno-firewall.8.gz
 
+rm -fv /usr/local/share/doc/arno-firewall/README.md
 rm -fv /usr/local/share/doc/arno-firewall/README
 
 rm -fv /etc/logrotate.d/arno-firewall
