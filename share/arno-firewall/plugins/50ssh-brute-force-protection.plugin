@@ -2,10 +2,10 @@
 #    -= Arno's (NFT) Firewall(ANF) - SSH Brute Force Protection plugin =-
 #
 PLUGIN_NAME="SSH Brute-Force Protection plugin"
-PLUGIN_VERSION="1.1b"
+PLUGIN_VERSION="1.2"
 PLUGIN_CONF_FILE="ssh-brute-force-protection.conf"
 #
-# Last changed          : June 14, 2017
+# Last changed          : October 1, 2026
 # Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This plugin implements protecting for brute force
 #                         cracking by limiting the amount of connection attempts
@@ -15,7 +15,7 @@ PLUGIN_CONF_FILE="ssh-brute-force-protection.conf"
 #                         (eg. FTP/SMTP/IMAP etc.
 #                         Updated for mixed IPv4/IPv6
 #
-# Author                : (C) Copyright 2006-2017 by Arno van Amersfoort
+# Author                : (C) Copyright 2006-2026 by Arno van Amersfoort
 # Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .

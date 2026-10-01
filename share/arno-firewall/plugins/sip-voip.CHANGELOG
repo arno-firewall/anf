@@ -1,3 +1,10 @@
+Version 0.33BETA (October 1, 2026)
+----------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+* Conntrack/NAT helper via load_conntrack_helper_module, for all SIP_VOIP_PORTS
+- Removed the ports= module parameter (only used for automatic helper assignment)
+
 Version 0.32BETA (June 13, 2017)
 --------------------------------
 * Add support for v2.0.2 using the CONNTRACK_HELPER chain

@@ -1,3 +1,13 @@
+Version 1.02 (October 1, 2026)
+------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+! PARASITIC_NET_DENY_POLICY (DROP/REJECT) was used as a chain name instead of as a verdict
+! Duplicate rules for interfaces with multiple addresses in one subnet, the client networks are
+  now taken from the connected routes
+* The helper rebuilds PARASITIC_NET_ACL in one atomic update
+* Status output adapted to nft listings
+
 Version 1.01 (January 14, 2019)
 -------------------------------
 + Support for specifying source hosts in PARASITIC_NET_HOST_xxxxxxxxxxxxx variables

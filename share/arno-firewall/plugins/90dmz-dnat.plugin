@@ -2,17 +2,17 @@
 # -= Arno's (NFT) Firewall(ANF) - DMZ-host default port forwarding plugin =-
 #
 PLUGIN_NAME="DMZ-host DNAT plugin"
-PLUGIN_VERSION="0.10"
+PLUGIN_VERSION="0.10a"
 PLUGIN_CONF_FILE="dmz-dnat.conf"
 #
-# Last changed          : January 5, 2019
+# Last changed          : October 1, 2026
 # Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This plugin allows forwarding of all traffic to a "DMZ" host.
 #                         Updated to be IPv4-only
 #                         Updated to support parse_rule()
 #                         Updated to support ipt_if()
 #
-# Author                : (C) Copyright 2010-2019 by Arno van Amersfoort
+# Author                : (C) Copyright 2010-2026 by Arno van Amersfoort
 #                       : (C) Copyright 2010-2016 by Philip A. Prindeville
 # Email                 : philipp AT redfish-solutions DOT com
 #                         (note: you must remove all spaces and substitute the @ and the .

@@ -1,3 +1,13 @@
+Version 1.2.3 (October 1, 2026)
+-------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+! The hook ended up in the NAT POSTROUTING chain, which only sees the first packet of a
+  connection, it's now in MANGLE_POSTROUTING
+! iptables style port ranges in the port lists (eg. u5060:5064)
+* CLASSIFY as meta priority set
+- Removed the unneeded nf_nat module load
+
 Version 1.2.05 (December 27, 2012)
 ----------------------------------
 + Allow DOWNLINK=0 to disable inbound (ingress) shaping, UPLINK must be greater than 0

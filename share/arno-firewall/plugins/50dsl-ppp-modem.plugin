@@ -2,14 +2,14 @@
 #         -= Arno's (NFT) Firewall(ANF) - (A)DSL PPP Modem plugin =-
 #
 PLUGIN_NAME="(A)DSL PPP Modem plugin"
-PLUGIN_VERSION="1.0g"
+PLUGIN_VERSION="1.0h"
 PLUGIN_CONF_FILE="dsl-ppp-modem.conf"
 #
-# Last changed          : October 20, 2011
+# Last changed          : October 1, 2026
 # Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This implements support for (A)DSL PPP modems
 #
-# Author                : (C) Copyright 2008-2011 by Arno van Amersfoort
+# Author                : (C) Copyright 2008-2026 by Arno van Amersfoort
 # Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .

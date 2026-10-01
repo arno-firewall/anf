@@ -2,10 +2,10 @@
 #  -= Arno's (NFT) Firewall(ANF) - (HTB/HFSC/CFQ) traffic shaper plugin =-
 #
 PLUGIN_NAME="Traffic Shaper Plugin"
-PLUGIN_VERSION="1.2.2a"
+PLUGIN_VERSION="1.2.3"
 PLUGIN_CONF_FILE="traffic-shaper.conf"
 #
-# Last changed          : July 21, 2015
+# Last changed          : October 1, 2026
 # Requirements          : ANF 3.0.0 (or newer) + iproute
 # Comments              : This plugin will shape traffic. It borrows heavily on
 #                         the logic of Maciej's original script (below), with

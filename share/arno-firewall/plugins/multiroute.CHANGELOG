@@ -1,3 +1,8 @@
+Version 1.00a (October 1, 2026)
+-------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+
 Version 1.00 (February 6, 2020)
 -------------------------------
 ! Replace ip route "equalize" with "scope global" since equalize is no longer supported (by default) in newer distributions

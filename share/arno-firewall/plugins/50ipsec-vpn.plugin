@@ -2,14 +2,14 @@
 #             -= Arno's (NFT) Firewall(ANF) - IPsec VPN plugin =-
 #
 PLUGIN_NAME="IPsec VPN plugin"
-PLUGIN_VERSION="0.85"
+PLUGIN_VERSION="0.85a"
 PLUGIN_CONF_FILE="ipsec-vpn.conf"
 #
-# Last changed          : July 12, 2016
+# Last changed          : October 1, 2026
 # Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This plugin adds all required rules for using Racoon IPSEC.
 #
-# Author                : (C) Copyright 2006-2016 by Philip Prindeville & Arno van Amersfoort
+# Author                : (C) Copyright 2006-2026 by Philip Prindeville & Arno van Amersfoort
 # Web                   : https://github.com/arno-firewall/anf
 # Email                 : philipp AT redfish-solutions DOT com
 #                         (note: you must remove all spaces and substitute the @ and the .

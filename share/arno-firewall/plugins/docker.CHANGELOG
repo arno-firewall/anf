@@ -1,0 +1,12 @@
+Version 1.02 (October 1, 2026)
+------------------------------
++ DOCKER_HOST_OPEN_ALL (expert setting, with a warning): allow the containers all services on this host
+
+Version 1.01 (October 1, 2026)
+------------------------------
++ DOCKER_HOST_OPEN_TCP/UDP: services (ports) on this host the containers may use
+
+Version 1.00 (October 1, 2026)
+------------------------------
++ Initial version: forwarding for the Docker bridges (DOCKER_IF) and to published ports (DNATed
+  connections only), warns when Docker's FORWARD policy is DROP

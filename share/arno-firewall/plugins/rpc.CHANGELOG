@@ -1,3 +1,9 @@
+Version 0.23-BETA (October 1, 2026)
+-----------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+! A restart lost the plugin's rules, plugin_restart now rebuilds them
+
 Version 0.22-BETA (April 13, 2020)
 ----------------------------------
 ! Parsing of rpcinfo failed due to missing EOL-space conversion

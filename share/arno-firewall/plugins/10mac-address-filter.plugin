@@ -2,16 +2,16 @@
 #        -= Arno's (NFT) Firewall(ANF) - MAC Address Filter plugin =-
 #
 PLUGIN_NAME="MAC Address Filter plugin"
-PLUGIN_VERSION="1.1b"
+PLUGIN_VERSION="1.1c"
 PLUGIN_CONF_FILE="mac-address-filter.conf"
 #
-# Last changed          : July 21, 2015
+# Last changed          : October 1, 2026
 # Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This plugin allows you to select the MAC addresses
 #                         that are allowed access for the specified interfaces
 #                         (eg. INT_IF)
 #
-# Author                : (C) Copyright 2010-2015 by Arno van Amersfoort
+# Author                : (C) Copyright 2010-2026 by Arno van Amersfoort
 # Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .

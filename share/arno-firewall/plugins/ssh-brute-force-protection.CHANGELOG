@@ -1,3 +1,12 @@
+Version 1.2 (October 1, 2026)
+-----------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+* Rate checks with per-source nft sets instead of xt_recent: a token bucket, eg. 4 per 60 seconds
+  allows a burst of 4, then 1 more every 15 seconds
+* With SSH_BFP_IPV6_ENABLE=0 IPv6 isn't checked (as before)
+* Use $() instead of backticks
+
 Version 1.1 (September 21, 2010)
 ------------------------------------
 * Updated for mixed IPv4/IPv6

@@ -1,3 +1,11 @@
+Version 1.2 (October 1, 2026)
+-----------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+* Hit counting and banning with nft sets (with timeout) instead of xt_recent
+* With IDS_IPV6_ENABLE=0 only IPv4 sources are checked (as before)
+* Use $() instead of backticks
+
 Version 1.1 (September 21, 2010)
 ----------------------------
 * Updated for mixed IPv4/IPv6

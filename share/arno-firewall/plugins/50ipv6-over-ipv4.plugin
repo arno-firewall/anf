@@ -2,14 +2,14 @@
 #          -= Arno's (NFT) Firewall(ANF) - IPv6-over-IPv4 plugin =-
 #
 PLUGIN_NAME="IPv6-over-IPv4 plugin"
-PLUGIN_VERSION="0.2BETA"
+PLUGIN_VERSION="0.2aBETA"
 PLUGIN_CONF_FILE="ipv6-over-ipv4.conf"
 #
-# Last changed          : October 8, 2010
+# Last changed          : October 1, 2026
 # Requirements          : kernel 2.6 with IPv6 support
 # Comments              : ANF 3.0.0 (or newer)
 #
-# Author                : (C) Copyright 2010 by Arno van Amersfoort
+# Author                : (C) Copyright 2010-2026 by Arno van Amersfoort
 # Web                   : https://github.com/arno-firewall/anf
 # Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
 #                         (note: you must remove all spaces and substitute the @ and the .

@@ -1,3 +1,9 @@
+Version 1.0h (October 1, 2026)
+------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+* Use $() instead of backticks
+
 Version 1.0g (October 20, 2011)
 -------------------------------
 ! Iptables negation changed in newer versions from intraposition to extraposition 

@@ -2,10 +2,10 @@
 #               -= Arno's (NFT) Firewall(ANF) - RPC plugin =-
 #
 PLUGIN_NAME="RPCplugin"
-PLUGIN_VERSION="0.22a-BETA"
+PLUGIN_VERSION="0.23-BETA"
 PLUGIN_CONF_FILE="rpc.conf"
 #
-# Last changed          : April 13, 2020
+# Last changed          : October 1, 2026
 # Requirements          : ANF 3.0.0 (or newer)
 # Comments              : This plugin opens RPC ports
 #

@@ -1,3 +1,10 @@
+Version 1.43 (October 1, 2026)
+------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+! A restart lost the plugin's rules, plugin_restart now rebuilds them
+* The helper rebuilds DYNDNS_CHAIN in one atomic update
+
 Version 1.42 (May 9, 2019)
 --------------------------
 ! Fixed (dynamic) host multi IP handling

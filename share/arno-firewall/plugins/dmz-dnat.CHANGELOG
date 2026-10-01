@@ -1,3 +1,9 @@
+Version 0.10a (October 1, 2026)
+-------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+* Use $() instead of backticks
+
 Version 0.10 (January 5, 2019)
 ----------------------------
 * Changed to support ipt_if() function (requires AIF 2.1.0+)

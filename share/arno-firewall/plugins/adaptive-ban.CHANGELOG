@@ -1,0 +1,7 @@
+Version 1.05 BETA (October 1, 2026)
+-----------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+* Banned hosts are elements of an nft set (instead of one rule per host)
+* Reject as one icmpx rule for IPv4 and IPv6
+! Status: the last banned host was printed without a newline

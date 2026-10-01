@@ -1,3 +1,13 @@
+Version 1.32 (October 1, 2026)
+------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+* Named nft counters, read and reset atomically by the helper
+* Totals follow a host when its IP changes (eg. dynamic DNS)
+! New hosts are counted from the first run
+! A restart lost the accounting chains, plugin_restart now rebuilds them
+- No longer enables conntrack accounting (not needed with nft counters)
+
 Version 1.31 (May 9, 2018)
 --------------------------
 ! Fixed (dynamic) host multi IP handling

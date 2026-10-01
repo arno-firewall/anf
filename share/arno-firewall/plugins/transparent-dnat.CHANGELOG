@@ -1,3 +1,9 @@
+Version 0.31aBETA (EXPERIMENTAL!) (October 1, 2026)
+---------------------------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+* Load the nf_nat module only (no ip_nat fallback)
+
 Version 0.31BETA (July 31, 2015)
 --------------------------------
 * Use modprobe_multi for newer kernels

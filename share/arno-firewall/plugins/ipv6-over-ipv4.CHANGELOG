@@ -1,3 +1,8 @@
+Version 0.2aBETA (October 1, 2026)
+----------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+
 Version 0.2BETA (October 8, 2010)
 ------------------------------------
 + Added IPV6_OVER_IPV4_SERVER variable to restrict source packets

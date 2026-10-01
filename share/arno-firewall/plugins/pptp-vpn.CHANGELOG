@@ -1,3 +1,8 @@
+Version 1.00a BETA (October 1, 2026)
+------------------------------------
+* Converted to native nftables for Arno's (NFT) Firewall (rules in table inet anf)
+* Rules are no longer removed when stopping, (re)start and stop replace the whole ruleset atomically
+
 Version 1.00 BETA (February 21, 2011)
 -----------------------------------
 + Initial version
