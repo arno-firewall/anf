@@ -357,7 +357,8 @@ CONFIG_OPTIONS = ('RESOLVE_NAMES', 'SHOW_LOCATION', 'USE_ANSI_COLORS', 'USE_HTML
 
 
 def load_config(path):
-    """Settings from the config file (KEY=value lines, # comments), if it exists"""
+    """Settings from the config file (KEY=value lines, # comments). It's optional: when
+    it's missing (or unusable) the defaults above apply"""
     if not os.path.exists(path):
         return
     try:
@@ -371,13 +372,14 @@ def load_config(path):
         line = line.split('#', 1)[0].strip()
         if not line:
             continue
+        shown = ''.join(c if c.isprintable() else '?' for c in line)
         key, sep, value = line.partition('=')
         key = key.strip()
-        value = value.strip().strip('"\'')
+        value = value.strip().strip('"').strip("'")
         if not sep or key not in CONFIG_OPTIONS:
-            print('arno-fwfilter: WARNING: Unknown setting in %s line %d: %s' % (path, num, line), file=sys.stderr)
+            print('arno-fwfilter: WARNING: Unknown setting in %s line %d: %s' % (path, num, shown), file=sys.stderr)
         elif value not in ('0', '1'):
-            print('arno-fwfilter: WARNING: Invalid value in %s line %d: %s (use 0 or 1)' % (path, num, line), file=sys.stderr)
+            print('arno-fwfilter: WARNING: Invalid value in %s line %d: %s (use 0 or 1)' % (path, num, shown), file=sys.stderr)
         else:
             globals()[key] = int(value)
 
