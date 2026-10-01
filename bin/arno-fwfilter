@@ -420,22 +420,25 @@ def location(ip):
     return LOCATION_CACHE[ip]
 
 
-def host(ip, kind):
-    """Name (or IP) of ip, with its location if enabled, in the color of kind"""
-    out = color_on(kind) + ' '
-    out += resolve_name(ip) if RESOLVE_NAMES == 1 else ip
+def host(ip, kind, port=''):
+    """Name (or IP) of ip with :port, and its location if enabled, in the color of kind"""
+    name = resolve_name(ip) if RESOLVE_NAMES == 1 else ip
+    if port:
+        # An IPv6 address (no name) needs brackets around it, as it contains colons itself
+        name = '[%s]:%s' % (name, port) if ':' in name else '%s:%s' % (name, port)
+    out = color_on(kind) + ' ' + name
     if SHOW_LOCATION == 1:
         out += location(ip)
     return out + color_off()
 
 
-def hosts_info(src_ip, dst_ip):
-    """Both hosts on one line: src -> dst"""
+def hosts_info(src_ip, dst_ip, src_port='', dst_port=''):
+    """Both hosts (and ports) on one line: src:port -> dst:port"""
     out = ''
     if RESOLVE_NAMES == 1 or SHOW_LOCATION == 1:
         if USE_1ROW == 0:
             out += newline_indent()
-        out += host(src_ip, 'src') + ' ->' + host(dst_ip, 'dst')
+        out += host(src_ip, 'src', src_port) + ' ->' + host(dst_ip, 'dst', dst_port)
     return out
 
 
@@ -478,8 +481,6 @@ def filter_line(line):
         if fi[:4] == 'DST=':
             # Show destination
             out += color_on('dst') + ' ' + fi + color_off()
-
-            out += hosts_info(src_host, dst_host)
             break
         i += 1
 
@@ -506,7 +507,13 @@ def filter_line(line):
     else:
         out += ' ' + proto
 
+    src_port = dst_port = ''
     if field(offset + 1)[:4] == 'SPT=':
+        # The ports of this packet (not those of an ICMP payload), for the hosts line
+        src_port = field(offset + 1)[4:]
+        if field(offset + 2)[:4] == 'DPT=':
+            dst_port = field(offset + 2)[4:]
+
         # Second show DPT=, third SPT=
         out += color_on('port') + ' DPT=%s' % portname_lookup(field(offset + 2)[4:]) + color_off()
         out += ' SPT=%s' % portname_lookup(field(offset + 1)[4:])
@@ -533,6 +540,10 @@ def filter_line(line):
                     and fi[:4] != 'DPT=' and fi != 'RES=0x00' and fi != 'URGP=0' and fi[:7] != 'WINDOW='
                     and fi[:5] != 'TYPE=' and fi[:5] != 'CODE='):
                 out += ' ' + fi
+
+    # Last the hosts (and ports): src:port -> dst:port
+    if dst_host:
+        out += hosts_info(src_host, dst_host, src_port, dst_port)
     return out
 
 
