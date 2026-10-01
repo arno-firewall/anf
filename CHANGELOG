@@ -1,3 +1,17 @@
-Version 3.0.0-ALPHA1-DEVEL (September 28, 2026)
------------------------------------
+Version 3.0.0-ALPHA1-DEVEL (October 1, 2026)
+--------------------------------------------
+! adaptive-ban added a duplicate ban rule on every run with dash as /bin/sh
+! traffic-accounting-helper duplicated entries of multi-IP hosts and ignored new hosts
+* Have install.sh merge settings from existing *.conf files when conf-files are updated
+! NAT_FORWARD_* also accepted direct connections to the forwarded host
+! First time installs showed a (harmless) error about missing USR_SHARE_PATH
+! install.sh asked to overwrite config files that only differ in comments
++ Improve arno-fwfilter output concerning eg. host-resolving
+* Translate arno-fwfilter from awk/bash to Python3. Settings are now also configurable from /etc/arno-firewall/arno-fwfilter.conf
+* Cleanup code
+* Get rid of legacy stuff
++ New docker plugin
++ Implement support for migrating old aif to anf config
++ Handle properly when there are iptables rules left behind by aif
++ Have NFT_BATCH option to select NFT batch mode or normal mode
 * Initial port from AIF/iptables to ANF/nft
