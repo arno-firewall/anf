@@ -75,11 +75,11 @@ plugin_start()
   fi
 
   # Banned hosts are added to these sets by the helper
-  nft_cmd "add set inet $NFT_TABLE aif_adaptive_ban { type ipv4_addr; }"
-  nft_rule ADAPTIVE_BAN_CHAIN "ip saddr @aif_adaptive_ban jump ADAPTIVE_BAN_DROP_CHAIN"
+  nft_cmd "add set inet $NFT_TABLE anf_adaptive_ban { type ipv4_addr; }"
+  nft_rule ADAPTIVE_BAN_CHAIN "ip saddr @anf_adaptive_ban jump ADAPTIVE_BAN_DROP_CHAIN"
   if [ "$IPV6_SUPPORT" = "1" ]; then
-    nft_cmd "add set inet $NFT_TABLE aif_adaptive_banv6 { type ipv6_addr; }"
-    nft_rule ADAPTIVE_BAN_CHAIN "ip6 saddr @aif_adaptive_banv6 jump ADAPTIVE_BAN_DROP_CHAIN"
+    nft_cmd "add set inet $NFT_TABLE anf_adaptive_banv6 { type ipv6_addr; }"
+    nft_rule ADAPTIVE_BAN_CHAIN "ip6 saddr @anf_adaptive_banv6 jump ADAPTIVE_BAN_DROP_CHAIN"
   fi
 
   # Insert rule in the INPUT chain
@@ -113,9 +113,9 @@ plugin_status()
 {
   echo "  Banned Hosts:"
   echo "  =============================="
-  $NFT list set inet $NFT_TABLE aif_adaptive_ban 2>/dev/null |tr -d '\n' |sed -n -e 's/^.*elements = { *\([^}]*\)}.*$/\1/p' |tr ',' '\n' |awk '{ gsub(/^[ \t]+|[ \t]+$/, ""); if ($0 != "") print "  " $0 }'
+  $NFT list set inet $NFT_TABLE anf_adaptive_ban 2>/dev/null |tr -d '\n' |sed -n -e 's/^.*elements = { *\([^}]*\)}.*$/\1/p' |tr ',' '\n' |awk '{ gsub(/^[ \t]+|[ \t]+$/, ""); if ($0 != "") print "  " $0 }'
   if [ "$IPV6_SUPPORT" = "1" ]; then
-    $NFT list set inet $NFT_TABLE aif_adaptive_banv6 2>/dev/null |tr -d '\n' |sed -n -e 's/^.*elements = { *\([^}]*\)}.*$/\1/p' |tr ',' '\n' |awk '{ gsub(/^[ \t]+|[ \t]+$/, ""); if ($0 != "") print "  " $0 }'
+    $NFT list set inet $NFT_TABLE anf_adaptive_banv6 2>/dev/null |tr -d '\n' |sed -n -e 's/^.*elements = { *\([^}]*\)}.*$/\1/p' |tr ',' '\n' |awk '{ gsub(/^[ \t]+|[ \t]+$/, ""); if ($0 != "") print "  " $0 }'
   fi
   echo "  ------------------------------"
   echo ""

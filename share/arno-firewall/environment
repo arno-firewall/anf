@@ -1541,7 +1541,7 @@ lock_leave()
     return 1 # Failure
   fi
 
-  LOCK_FILE="/var/lock/aif_$1.lock"
+  LOCK_FILE="/var/lock/anf_$1.lock"
 
   # Remove lockfile
   if ! rm -f "$LOCK_FILE"; then
@@ -1604,7 +1604,7 @@ lock_enter_internal()
 # $2 = Amount of retries (optional, defaults to 5)
 lock_enter_single()
 {
-  local LOCK_FILE="/var/lock/aif_$1.lock"
+  local LOCK_FILE="/var/lock/anf_$1.lock"
 
   if [ -z "$1" ]; then
     echo "ERROR: Exception due to missing lock argument" >&2
@@ -1626,7 +1626,7 @@ lock_enter_single()
 # $2 = Amount of retries (optional, defaults to 5)
 lock_enter()
 {
-  local LOCK_FILE="/var/lock/aif_$1.lock"
+  local LOCK_FILE="/var/lock/anf_$1.lock"
   local MAX_RETRIES="${2:-5}"
   local FAIL_COUNT=0
 
@@ -1657,7 +1657,7 @@ lock_enter()
 # $2 = Optional wait time in seconds (default = 5 seconds)
 lock_wait()
 {
-  local LOCK_FILE="/var/lock/aif_$1.lock"
+  local LOCK_FILE="/var/lock/anf_$1.lock"
   local cnt="${2:-5}" # Default to 5 seconds
 
   if [ -z "$1" ]; then
@@ -1885,11 +1885,11 @@ get_network_ipv6_mask()
 ################################# Main ####################################
 
 # Set file to store which plugins are loaded
-PLUGIN_LOAD_FILE="/var/tmp/aif_active_plugins"
-PLUGIN_LOAD_FILE_RESTART="/var/tmp/aif_active_plugins_restart"
+PLUGIN_LOAD_FILE="/var/tmp/anf_active_plugins"
+PLUGIN_LOAD_FILE_RESTART="/var/tmp/anf_active_plugins_restart"
 
 # (Dynamic) host cache. Used by compatible plugins
-HOST_CACHE_FILE="/var/tmp/aif_host_cache"
+HOST_CACHE_FILE="/var/tmp/anf_host_cache"
 
 # Check for a local/global config file
 ######################################

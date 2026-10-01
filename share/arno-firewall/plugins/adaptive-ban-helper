@@ -8,7 +8,7 @@ NFT_COMMENT="adaptive-ban"
 # Preinit return value for success
 PLUGIN_RET_VAL=0
 
-TEMPFILE="/var/tmp/aif_adaptive_ban.temp"
+TEMPFILE="/var/tmp/anf_adaptive_ban.temp"
 
 # Check sanity of environment
 adaptive_ban_helper_sanity_check()
@@ -164,13 +164,13 @@ ban_host()
   case $? in
   4)
     # "create" fails for hosts that are already banned
-    if $NFT create element inet $NFT_TABLE aif_adaptive_ban "{ $host }" 2>/dev/null; then
+    if $NFT create element inet $NFT_TABLE anf_adaptive_ban "{ $host }" 2>/dev/null; then
       echo "Banned IPv4 host: $host  Filter type: $type" >&2
     fi
     ;;
   6)
     if [ "$IPV6_SUPPORT" = "1" ]; then
-      if $NFT create element inet $NFT_TABLE aif_adaptive_banv6 "{ $host }" 2>/dev/null; then
+      if $NFT create element inet $NFT_TABLE anf_adaptive_banv6 "{ $host }" 2>/dev/null; then
         echo "Banned IPv6 host: $host  Filter type: $type" >&2
       fi
     fi

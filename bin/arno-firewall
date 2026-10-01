@@ -4271,7 +4271,7 @@ setup_hostblock_chain()
     nft_begin update
     nft_cmd "flush chain inet $NFT_TABLE HOST_BLOCK_SRC"
     nft_cmd "flush chain inet $NFT_TABLE HOST_BLOCK_DST"
-    for set_name in $($NFT list sets table inet $NFT_TABLE 2>/dev/null |awk '$1 == "set" && $2 ~ /^aif_(block|white|netset_)/ { print $2 }'); do
+    for set_name in $($NFT list sets table inet $NFT_TABLE 2>/dev/null |awk '$1 == "set" && $2 ~ /^anf_(block|white|netset_)/ { print $2 }'); do
       nft_cmd "delete set inet $NFT_TABLE $set_name"
     done
   fi
@@ -4285,9 +4285,9 @@ setup_hostblock_chain()
   fi
 
   if [ -n "$BLOCK_HOSTS" -o -n "$BLOCK_HOSTS_FILE" ]; then
-    hostblock_set aif_blocklist ipv4_addr "jump HOST_BLOCK_SRC_DROP" "jump HOST_BLOCK_DST_DROP"
+    hostblock_set anf_blocklist ipv4_addr "jump HOST_BLOCK_SRC_DROP" "jump HOST_BLOCK_DST_DROP"
     if [ "$IPV6_SUPPORT" = "1" ]; then
-      hostblock_set aif_blocklistv6 ipv6_addr "jump HOST_BLOCK_SRC_DROP" "jump HOST_BLOCK_DST_DROP"
+      hostblock_set anf_blocklistv6 ipv6_addr "jump HOST_BLOCK_SRC_DROP" "jump HOST_BLOCK_DST_DROP"
     fi
   fi
 
@@ -4301,9 +4301,9 @@ setup_hostblock_chain()
       for host in $(ip_range "$hosts"); do
         get_numeric_ip_version "$host"
         case $? in
-          4) nft_cmd "add element inet $NFT_TABLE aif_blocklist { $host }" ;;
+          4) nft_cmd "add element inet $NFT_TABLE anf_blocklist { $host }" ;;
           6) if [ "$IPV6_SUPPORT" = "1" ]; then
-               nft_cmd "add element inet $NFT_TABLE aif_blocklistv6 { $host }"
+               nft_cmd "add element inet $NFT_TABLE anf_blocklistv6 { $host }"
              fi
              ;;
         esac
@@ -4324,9 +4324,9 @@ setup_hostblock_chain()
         for host in $(ip_range "$hosts"); do
           get_numeric_ip_version "$host"
           case $? in
-            4) nft_cmd "add element inet $NFT_TABLE aif_blocklist { $host }" ;;
+            4) nft_cmd "add element inet $NFT_TABLE anf_blocklist { $host }" ;;
             6) if [ "$IPV6_SUPPORT" = "1" ]; then
-                 nft_cmd "add element inet $NFT_TABLE aif_blocklistv6 { $host }"
+                 nft_cmd "add element inet $NFT_TABLE anf_blocklistv6 { $host }"
                fi
                ;;
           esac
@@ -4342,15 +4342,15 @@ setup_hostblock_chain()
 
   # Blocklists from *.netset files, whitelisted nets are exempted from these
   if [ -d "$BLOCK_NETSET_DIR" ] && ls "$BLOCK_NETSET_DIR"/*.netset >/dev/null 2>&1; then
-    hostblock_set aif_whitelist ipv4_addr "return" "return"
+    hostblock_set anf_whitelist ipv4_addr "return" "return"
     unset IFS
     for x in ${DEFAULT_NETSET_WHITELIST:-127.0.0.0/8 0.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 224.0.0.0/3}; do
-      nft_cmd "add element inet $NFT_TABLE aif_whitelist { $x }"
+      nft_cmd "add element inet $NFT_TABLE anf_whitelist { $x }"
     done
     if [ "$IPV6_SUPPORT" = "1" ]; then
-      hostblock_set aif_whitelistv6 ipv6_addr "return" "return"
+      hostblock_set anf_whitelistv6 ipv6_addr "return" "return"
       for x in ${DEFAULT_NETSET_WHITELISTV6:-::1 fe80::/10 ff00::/8}; do
-        nft_cmd "add element inet $NFT_TABLE aif_whitelistv6 { $x }"
+        nft_cmd "add element inet $NFT_TABLE anf_whitelistv6 { $x }"
       done
     fi
 
@@ -4369,8 +4369,8 @@ setup_hostblock_chain()
       fi
 
       case $set_name in
-        whitelist|whitelistv6) set_name="aif_$set_name" ;;
-                            *) set_name="aif_netset_$set_name"
+        whitelist|whitelistv6) set_name="anf_$set_name" ;;
+                            *) set_name="anf_netset_$set_name"
                                hostblock_set "$set_name" $type "jump HOST_BLOCK_SRC_DROP" "jump HOST_BLOCK_DST_DROP"
                                ;;
       esac
