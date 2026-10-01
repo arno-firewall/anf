@@ -98,9 +98,11 @@ fi
 
 # A stopped firewall leaves a small ruleset behind (FORWARD policy DROP), remove it
 # so it can't block another firewall. A running ruleset is left until the next reboot
-if nft list table inet aif >/dev/null 2>&1 && ! nft list chain inet aif BASE_INPUT_CHAIN >/dev/null 2>&1; then
-  nft delete table inet aif && echo "Removed the ruleset left behind by the stopped firewall (nftables table inet aif)"
-fi
+for table in anf aif; do
+  if nft list table inet $table >/dev/null 2>&1 && ! nft list chain inet $table BASE_INPUT_CHAIN >/dev/null 2>&1; then
+    nft delete table inet $table && echo "Removed the ruleset left behind by the stopped firewall (nftables table inet $table)"
+  fi
+done
 
 rm -fv /usr/local/sbin/arno-firewall
 # Shared with the iptables version: point it back to that one when it's still installed
