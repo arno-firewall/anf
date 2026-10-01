@@ -320,11 +320,17 @@ migrate_iptables_version()
     IPTABLES_VERSION_FOUND=1
   fi
 
-  # Is its service started at boot?
+  # Is its service started at boot? With systemd its unit counts (linked into a
+  # .wants directory), its rc links only without a unit file or without systemd.
+  # Note: "systemctl is-enabled" also reports the SysV state, so it isn't used
   if [ $old_prog -eq 1 ]; then
-    if check_command systemctl && systemctl is-enabled arno-iptables-firewall >/dev/null 2>&1; then
-      old_enabled=1
-    elif ls /etc/rc[2-5].d/S*arno-iptables-firewall /etc/rc.d/rc[2-5].d/S*arno-iptables-firewall >/dev/null 2>&1; then
+    if [ -d /run/systemd/system ] &&
+       ls /lib/systemd/system/arno-iptables-firewall.service /usr/lib/systemd/system/arno-iptables-firewall.service \
+          /etc/systemd/system/arno-iptables-firewall.service 2>/dev/null |grep -q .; then
+      if ls /etc/systemd/system/*.wants/arno-iptables-firewall.service 2>/dev/null |grep -q .; then
+        old_enabled=1
+      fi
+    elif ls /etc/rc[2-5S].d/S*arno-iptables-firewall /etc/rc.d/rc[2-5S].d/S*arno-iptables-firewall 2>/dev/null |grep -q .; then
       old_enabled=1
     fi
   fi
