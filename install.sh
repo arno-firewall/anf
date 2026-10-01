@@ -587,6 +587,7 @@ mkdir -pv /etc/arno-firewall || exit 1
 
 copy_overwrite ./etc/arno-firewall/firewall.conf /etc/arno-firewall/firewall.conf.dist
 copy_ask_if_exist ./etc/arno-firewall/firewall.conf /etc/arno-firewall/
+copy_ask_if_exist ./etc/arno-firewall/arno-fwfilter.conf /etc/arno-firewall/
 
 copy_skip_if_exist ./etc/arno-firewall/custom-rules /etc/arno-firewall/
 

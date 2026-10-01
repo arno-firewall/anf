@@ -40,6 +40,8 @@
 
 # Options:
 ##########
+# These are the defaults, /etc/arno-firewall/arno-fwfilter.conf overrides them,
+# command line options override both
 
 # Enable this option if you want to resolve IP adresses to names (requires "dig")
 RESOLVE_NAMES = 1
@@ -59,6 +61,7 @@ USE_1ROW = 0
 #################################################################################################
 
 import getopt
+import os
 import subprocess
 import sys
 import urllib.request
@@ -349,6 +352,36 @@ def newline_indent():
     return '<br>\n                         ' if USE_HTML == 1 else '\n               '
 
 
+CONFIG_FILE = '/etc/arno-firewall/arno-fwfilter.conf'
+CONFIG_OPTIONS = ('RESOLVE_NAMES', 'SHOW_LOCATION', 'USE_ANSI_COLORS', 'USE_HTML', 'USE_1ROW')
+
+
+def load_config(path):
+    """Settings from the config file (KEY=value lines, # comments), if it exists"""
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            lines = f.read().splitlines()
+    except OSError as err:
+        print('arno-fwfilter: WARNING: Unable to read %s: %s' % (path, err.strerror), file=sys.stderr)
+        return
+
+    for num, line in enumerate(lines, 1):
+        line = line.split('#', 1)[0].strip()
+        if not line:
+            continue
+        key, sep, value = line.partition('=')
+        key = key.strip()
+        value = value.strip().strip('"\'')
+        if not sep or key not in CONFIG_OPTIONS:
+            print('arno-fwfilter: WARNING: Unknown setting in %s line %d: %s' % (path, num, line), file=sys.stderr)
+        elif value not in ('0', '1'):
+            print('arno-fwfilter: WARNING: Invalid value in %s line %d: %s (use 0 or 1)' % (path, num, line), file=sys.stderr)
+        else:
+            globals()[key] = int(value)
+
+
 NAME_CACHE = {}
 
 
@@ -509,10 +542,14 @@ def usage():
     print('-l, --no-locations - Disable obtaining the IPs geographical location')
     print('-c, --no-colors    - Disable the use of (ANSI) colors in the output')
     print('-s, --single-line  - Put all information about an event in a single line')
+    print('')
+    print('Settings: %s (command line options override them)' % CONFIG_FILE)
 
 
 def main():
     global RESOLVE_NAMES, SHOW_LOCATION, USE_ANSI_COLORS, USE_HTML, USE_1ROW
+
+    load_config(CONFIG_FILE)
 
     try:
         opts, _ = getopt.gnu_getopt(sys.argv[1:], 'hrolcs',
