@@ -2,7 +2,7 @@
 #                 -= Arno's (NFT) Firewall(ANF) - Docker plugin =-
 #
 PLUGIN_NAME="Docker plugin"
-PLUGIN_VERSION="1.00"
+PLUGIN_VERSION="1.01"
 PLUGIN_CONF_FILE="docker.conf"
 #
 # Last changed          : October 1, 2026
@@ -12,6 +12,7 @@ PLUGIN_CONF_FILE="docker.conf"
 #                         plugin adds what the Docker bridges need in the FORWARD
 #                         chain of this firewall: traffic from the containers and
 #                         published ports (connections Docker DNATed) to them.
+#                         Optionally ports on this host the containers may use.
 #
 # Author                : (C) Copyright 2026 by Arno van Amersfoort
 # Web                   : https://github.com/arno-firewall/anf
@@ -52,7 +53,7 @@ docker_forward_drop()
 # Plugin start function
 plugin_start()
 {
-  local interface IFS
+  local interface port IFS
 
   nft_chain DOCKER_FORWARD
 
@@ -68,6 +69,30 @@ plugin_start()
   done
 
   nft_rule FORWARD "jump DOCKER_FORWARD"
+
+  # Ports (services) on this host the containers may use
+  if [ -n "$DOCKER_HOST_OPEN_TCP" -o -n "$DOCKER_HOST_OPEN_UDP" ]; then
+    nft_chain DOCKER_INPUT
+
+    IFS=' ,'
+    for interface in $DOCKER_IF; do
+      if [ -n "$DOCKER_HOST_OPEN_TCP" ]; then
+        echo "${INDENT}Allowing Docker interface $interface to this host for TCP port(s): $DOCKER_HOST_OPEN_TCP"
+        for port in $(echo "$DOCKER_HOST_OPEN_TCP" |nft_ports); do
+          nft_rule DOCKER_INPUT "$(nft_if iifname $interface) tcp dport $port accept"
+        done
+      fi
+
+      if [ -n "$DOCKER_HOST_OPEN_UDP" ]; then
+        echo "${INDENT}Allowing Docker interface $interface to this host for UDP port(s): $DOCKER_HOST_OPEN_UDP"
+        for port in $(echo "$DOCKER_HOST_OPEN_UDP" |nft_ports); do
+          nft_rule DOCKER_INPUT "$(nft_if iifname $interface) udp dport $port accept"
+        done
+      fi
+    done
+
+    nft_rule INPUT "jump DOCKER_INPUT"
+  fi
 
   if docker_forward_drop; then
     printf "\033[40m\033[1;31m${INDENT}WARNING: Docker's FORWARD policy is DROP, which also drops the traffic this\n" >&2
@@ -91,6 +116,7 @@ plugin_status()
 {
   echo "${INDENT}Docker interfaces: $DOCKER_IF"
   $NFT list chain inet $NFT_TABLE DOCKER_FORWARD 2>/dev/null |sed -n -r -e "s/^[[:space:]]*(.*accept)( comment \".*\")?$/${INDENT}\1/p"
+  $NFT list chain inet $NFT_TABLE DOCKER_INPUT 2>/dev/null |sed -n -r -e "s/^[[:space:]]*(.*accept)( comment \".*\")?$/${INDENT}\1/p"
 
   if docker_forward_drop; then
     echo "${INDENT}Docker's FORWARD policy: DROP (set \"ip-forward-no-drop\": true in /etc/docker/daemon.json)"
