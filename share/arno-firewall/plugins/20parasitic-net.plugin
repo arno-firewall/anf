@@ -88,7 +88,8 @@ parasitic_net_init()
     IFS=' ,'
     for if_ip in $(wildcard_ifs $PARASITIC_NET_IF); do
       snat_if="$(echo "$if_ip" |cut -d'~' -f1)"
-      snat_if_subnet="$(get_network_ipv4_address_mask_all $snat_if)"
+      # The connected network(s) of the interface, once per network (also with multiple addresses)
+      snat_if_subnet="$(ip -o -4 route show dev $snat_if proto kernel scope link 2>/dev/null |awk '{ print $1 }' |sort -u |tr '\n' ' ' |sed 's/ $//')"
       PARASITIC_NET_CLIENT_HOSTS="$PARASITIC_NET_CLIENT_HOSTS${PARASITIC_NET_CLIENT_HOSTS:+ }$snat_if_subnet"
     done
   fi
