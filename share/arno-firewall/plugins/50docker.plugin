@@ -1,0 +1,158 @@
+# ------------------------------------------------------------------------------
+#                 -= Arno's (NFT) Firewall(ANF) - Docker plugin =-
+#
+PLUGIN_NAME="Docker plugin"
+PLUGIN_VERSION="1.00"
+PLUGIN_CONF_FILE="docker.conf"
+#
+# Last changed          : October 1, 2026
+# Requirements          : ANF 3.0.0 (or newer) + Docker
+# Comments              : Docker manages its own rules in its own tables, which
+#                         this firewall leaves alone (also on a restart). This
+#                         plugin adds what the Docker bridges need in the FORWARD
+#                         chain of this firewall: traffic from the containers and
+#                         published ports (connections Docker DNATed) to them.
+#
+# Author                : (C) Copyright 2026 by Arno van Amersfoort
+# Web                   : https://github.com/arno-firewall/anf
+# Email                 : a r n o DOT v a n DOT a m e r s f o o r t AT g m a i l DOT c o m
+#                         (note: you must remove all spaces and substitute the @ and the .
+#                         at the proper locations!)
+# ------------------------------------------------------------------------------
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# version 2 as published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+# ------------------------------------------------------------------------------
+
+# Docker sets the FORWARD policy of its (iptables) table to DROP, unless its
+# "ip-forward-no-drop" option is set. That also drops what this firewall forwards
+docker_forward_drop()
+{
+  local family
+
+  for family in ip ip6; do
+    if $NFT list chain $family filter FORWARD 2>/dev/null |grep -q 'policy drop;'; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+
+# Plugin start function
+plugin_start()
+{
+  local interface IFS
+
+  nft_chain DOCKER_FORWARD
+
+  IFS=' ,'
+  for interface in $DOCKER_IF; do
+    echo "${INDENT}Allowing forwarding for Docker interface: $interface"
+
+    # Traffic from the containers (Docker masquerades it itself)
+    nft_rule DOCKER_FORWARD "$(nft_if iifname $interface) accept"
+
+    # Published ports: only connections Docker DNATed to a container
+    nft_rule DOCKER_FORWARD "$(nft_if oifname $interface) ct status dnat accept"
+  done
+
+  nft_rule FORWARD "jump DOCKER_FORWARD"
+
+  if docker_forward_drop; then
+    printf "\033[40m\033[1;31m${INDENT}WARNING: Docker's FORWARD policy is DROP, which also drops the traffic this\n" >&2
+    printf "${INDENT}         firewall forwards (eg. NAT)! Add '\"ip-forward-no-drop\": true' to\n" >&2
+    printf "${INDENT}         /etc/docker/daemon.json and restart Docker.\033[0m\n" >&2
+  fi
+
+  return 0
+}
+
+
+# Plugin stop function
+plugin_stop()
+{
+  return 0
+}
+
+
+# Plugin status function
+plugin_status()
+{
+  echo "${INDENT}Docker interfaces: $DOCKER_IF"
+  $NFT list chain inet $NFT_TABLE DOCKER_FORWARD 2>/dev/null |sed -n -r -e "s/^[[:space:]]*(.*accept)( comment \".*\")?$/${INDENT}\1/p"
+
+  if docker_forward_drop; then
+    echo "${INDENT}Docker's FORWARD policy: DROP (set \"ip-forward-no-drop\": true in /etc/docker/daemon.json)"
+  else
+    echo "${INDENT}Docker's FORWARD policy: no DROP"
+  fi
+
+  return 0
+}
+
+
+# Check sanity of eg. environment
+plugin_sanity_check()
+{
+  if [ -z "$DOCKER_IF" ]; then
+    printf "\033[40m\033[1;31m${INDENT}ERROR: The plugin config file is not properly set!\033[0m\n" >&2
+    return 1
+  fi
+
+  return 0
+}
+
+
+############
+# Mainline #
+############
+
+# Check where to find the config file
+CONF_FILE=""
+if [ -n "$PLUGIN_CONF_PATH" ]; then
+  CONF_FILE="$PLUGIN_CONF_PATH/$PLUGIN_CONF_FILE"
+fi
+
+# Preinit to success:
+PLUGIN_RET_VAL=0
+
+# Check if the config file exists
+if [ ! -f "$CONF_FILE" ]; then
+  printf "NOTE: Config file \"$CONF_FILE\" not found!\n        Plugin \"$PLUGIN_NAME v$PLUGIN_VERSION\" ignored!\n" >&2
+else
+  # Source the plugin config file
+  . "$CONF_FILE"
+
+  if [ "$ENABLED" = "1" ] ||
+     [ -n "$PLUGIN_LOAD_FILE" -a "$PLUGIN_CMD" = "stop" ] ||
+     [ -n "$PLUGIN_LOAD_FILE" -a "$PLUGIN_CMD" = "status" ]; then
+    # Show who we are:
+    echo "${INDENT}$PLUGIN_NAME v$PLUGIN_VERSION"
+
+    # Increment indention
+    INDENT="$INDENT "
+
+    # Only proceed if environment ok
+    if ! plugin_sanity_check; then
+      PLUGIN_RET_VAL=1
+    else
+      case $PLUGIN_CMD in
+        start|'') plugin_start; PLUGIN_RET_VAL=$? ;;
+        stop    ) plugin_stop; PLUGIN_RET_VAL=$? ;;
+        status  ) plugin_status; PLUGIN_RET_VAL=$? ;;
+        *       ) PLUGIN_RET_VAL=1; printf "\033[40m\033[1;31m${INDENT}ERROR: Invalid plugin option \"$PLUGIN_CMD\"!\033[0m\n" >&2 ;;
+      esac
+    fi
+  fi
+fi
