@@ -160,8 +160,9 @@ merge_config()
       if (incont) { old[var] = old[var] "\n" $0; incont = cont($0); next }
       if (match($0, /^[A-Za-z_][A-Za-z0-9_]*=/)) {
         var = substr($0, 1, RLENGTH - 1)
-        if (!(var in old)) order[++n] = var
-        old[var] = $0
+        # A setting defined more than once (eg. built up step by step) keeps all its definitions
+        if (!(var in old)) { order[++n] = var; old[var] = $0 }
+        else old[var] = old[var] "\n" $0
         q = 0; incont = cont($0)
       }
       next
@@ -216,6 +217,36 @@ merge_config()
 }
 
 
+# Usage: var_values FILE VAR...
+# Prints the values of the VARs after sourcing FILE (in a separate shell)
+var_values()
+{
+  sh -c 'file="$1"; shift; . "$file" >/dev/null 2>&1; for v in "$@"; do eval "printf \"%s=[%s]\\n\" \"\$v\" \"\${$v}\""; done' sh "$@"
+}
+
+
+# Usage: merge_check OLD_FILE MERGED_FILE
+# Do all settings of OLD_FILE have the same value in MERGED_FILE? If not, the
+# changed ones are printed (and it returns 1)
+merge_check()
+{
+  local vars var changed=""
+
+  vars="$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$1" |tr -d '=' |sort -u)"
+  if [ "$(var_values "$1" $vars)" = "$(var_values "$2" $vars)" ]; then
+    return 0
+  fi
+
+  for var in $vars; do
+    if [ "$(var_values "$1" $var)" != "$(var_values "$2" $var)" ]; then
+      changed="$changed${changed:+ }$var"
+    fi
+  done
+  echo "$changed"
+  return 1
+}
+
+
 copy_ask_if_exist()
 {
   local DIFF_RETVAL=-1
@@ -263,7 +294,16 @@ copy_ask_if_exist()
           continue
         fi
 
-        if get_user_yn "File \"$TARGET\" differs from the new version. Merge your settings into the new version" "y"; then
+        # Safety check: the merge may never change the value of any of your settings
+        printf '%s\n' "$MERGED" >"$TARGET.merge-check"
+        CHANGED="$(merge_check "$TARGET" "$TARGET.merge-check")"
+        MERGE_OK=$?
+        rm -f "$TARGET.merge-check"
+
+        if [ $MERGE_OK -ne 0 ]; then
+          printf "\033[40m\033[1;31mWARNING: Merging \"$TARGET\" would change the value of: $CHANGED\033[0m\n" >&2
+          printf "\033[40m\033[1;31m         So it's not merged, compare it with the new version yourself.\033[0m\n" >&2
+        elif get_user_yn "File \"$TARGET\" differs from the new version. Merge your settings into the new version" "y"; then
           if ! cp -v --preserve=mode,timestamps "$TARGET" "$TARGET.${BACKUP_EXT:-old}" ||
              ! printf '%s\n' "$MERGED" >"$TARGET"; then
             echo "ERROR: Merge into \"$TARGET\" failed!" >&2
