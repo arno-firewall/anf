@@ -141,11 +141,23 @@ is_var_config()
 # active VAR=, or else a commented out #VAR= in NEW_FILE, gets the setting of
 # OLD_FILE. Settings NEW_FILE doesn't have (obsolete ones, or your own variables
 # used by other settings) are kept right after the setting they followed in
-# OLD_FILE, so they're still defined before they're used
+# OLD_FILE, or earlier when a setting before that uses them, so they're always
+# defined before they're used
 merge_config()
 {
   awk "$VAR_CONFIG_AWK"'
+    # The settings a setting uses ($VAR or ${VAR}) that NEW_FILE does not have, are
+    # printed first, so they are defined before they are used (whatever the order)
+    function need(text,   rest, name) {
+      rest = text
+      while (match(rest, /\$\{?[A-Za-z_][A-Za-z0-9_]*/)) {
+        name = substr(rest, RSTART, RLENGTH); sub(/^\$\{?/, "", name)
+        rest = substr(rest, RSTART + RLENGTH)
+        if ((name in old) && !(name in innew) && !(name in printed)) { printed[name] = 1; keep(name) }
+      }
+    }
     function keep(var) {
+      need(old[var])
       print "# (Not in the new version of this file, kept from your previous configuration)"
       print old[var]
       kept++
@@ -172,9 +184,12 @@ merge_config()
       if (match($0, /^[A-Za-z_][A-Za-z0-9_]*=/)) {
         var = substr($0, 1, RLENGTH - 1)
         active[var] = innew[var] = 1
+        np++; if (!(var in apos)) apos[var] = np
         q = 0; incont = cont($0)
       } else if (match($0, /^#[A-Za-z_][A-Za-z0-9_]*=/)) {
-        innew[substr($0, 2, RLENGTH - 2)] = 1
+        var = substr($0, 2, RLENGTH - 2)
+        innew[var] = 1
+        np++; if (!(var in cpos)) cpos[var] = np
       }
       next
     }
@@ -184,6 +199,39 @@ merge_config()
       for (i = 1; i <= n; i++) {
         if (order[i] in innew) last = order[i]
         else after[order[i]] = last
+      }
+
+      # Where each setting of NEW_FILE ends up (its active line, else a #VAR= line)
+      for (v in innew) pos[v] = (v in apos) ? apos[v] : cpos[v]
+
+      # They must also come before their first use: the earliest position (in NEW_FILE
+      # order) of a setting using them, also via other settings NEW_FILE does not have
+      for (i = 1; i <= n; i++) if (!(order[i] in innew)) first_use[order[i]] = 1e9
+      do {
+        changed = 0
+        for (i = 1; i <= n; i++) {
+          u = order[i]; upos = (u in innew) ? pos[u] : first_use[u]
+          rest = old[u]
+          while (match(rest, /\$\{?[A-Za-z_][A-Za-z0-9_]*/)) {
+            name = substr(rest, RSTART, RLENGTH); sub(/^\$\{?/, "", name)
+            rest = substr(rest, RSTART + RLENGTH)
+            if ((name in first_use) && name != u && upos < first_use[name]) { first_use[name] = upos; changed = 1 }
+          }
+        }
+      } while (changed)
+
+      # When the setting they followed comes too late, they follow the last setting
+      # (of both files) before their first use instead
+      for (i = 1; i <= n; i++) {
+        h = order[i]
+        if (!(h in first_use) || first_use[h] == 1e9) continue
+        if ((after[h] == "" ? 0 : pos[after[h]]) < first_use[h]) continue
+        best = ""; bestpos = 0
+        for (j = 1; j <= n; j++) {
+          v = order[j]
+          if ((v in innew) && pos[v] < first_use[h] && pos[v] > bestpos) { best = v; bestpos = pos[v] }
+        }
+        after[h] = best
       }
     }
     {
@@ -196,6 +244,7 @@ merge_config()
         var = substr($0, 1, RLENGTH - 1)
         q = 0; c = cont($0)
         if (var in old) {
+          need(old[var])
           print old[var]; used[var] = 1; skip = c
           keep_after(var)
           next
@@ -204,7 +253,7 @@ merge_config()
       }
       if (match($0, /^#[A-Za-z_][A-Za-z0-9_]*=/)) {
         var = substr($0, 2, RLENGTH - 2)
-        if ((var in old) && !(var in active) && !(var in used)) { print old[var]; used[var] = 1; keep_after(var); next }
+        if ((var in old) && !(var in active) && !(var in used)) { need(old[var]); print old[var]; used[var] = 1; keep_after(var); next }
       }
       print
     }
