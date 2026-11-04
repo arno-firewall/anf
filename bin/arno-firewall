@@ -4271,7 +4271,7 @@ setup_hostblock_chain()
     nft_begin update
     nft_cmd "flush chain inet $NFT_TABLE HOST_BLOCK_SRC"
     nft_cmd "flush chain inet $NFT_TABLE HOST_BLOCK_DST"
-    for set_name in $($NFT list sets table inet $NFT_TABLE 2>/dev/null |awk '$1 == "set" && $2 ~ /^anf_(block|white|netset_)/ { print $2 }'); do
+    $NFT list sets table inet $NFT_TABLE 2>/dev/null |awk '$1 == "set" && $2 ~ /^anf_(block|white|netset_)/ { print $2 }' |while IFS= read -r set_name; do
       nft_cmd "delete set inet $NFT_TABLE $set_name"
     done
   fi
