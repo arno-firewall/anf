@@ -1,5 +1,5 @@
-Version 3.0.0-ALPHA1-DEVEL (October 1, 2026)
---------------------------------------------
+Version 3.0.0-BETA1 (November 24, 2026)
+---------------------------------------
 ! adaptive-ban added a duplicate ban rule on every run with dash as /bin/sh
 ! traffic-accounting-helper duplicated entries of multi-IP hosts and ignored new hosts
 * Have install.sh merge settings from existing *.conf files when conf-files are updated
