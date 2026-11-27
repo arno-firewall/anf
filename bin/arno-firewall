@@ -4259,7 +4259,7 @@ hostblock_set()
 # With "reload" the blocked hosts are reloaded into the running firewall in their own transaction
 setup_hostblock_chain()
 {
-  local set_name netset type hosts host x IFS
+  local set_name netset type hosts host x IFS old_ifs
 
   if [ "$1" = "reload" ]; then
     if ! $NFT list chain inet $NFT_TABLE HOST_BLOCK_SRC >/dev/null 2>&1; then
@@ -4271,9 +4271,14 @@ setup_hostblock_chain()
     nft_begin update
     nft_cmd "flush chain inet $NFT_TABLE HOST_BLOCK_SRC"
     nft_cmd "flush chain inet $NFT_TABLE HOST_BLOCK_DST"
+    old_ifs="$IFS"
+    IFS='
+'
     for set_name in $($NFT list sets table inet $NFT_TABLE 2>/dev/null |awk '$1 == "set" && $2 ~ /^anf_(block|white|netset_)/ { print $2 }'); do
+      [ -n "$set_name" ] || continue
       nft_cmd "delete set inet $NFT_TABLE $set_name"
     done
+    IFS="$old_ifs"
   fi
 
   if [ -n "$BLOCK_HOSTS" -o -n "$BLOCK_HOSTS_FILE" -o -n "$BLOCK_NETSET_DIR" ]; then
